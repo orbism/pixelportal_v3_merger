@@ -195,12 +195,21 @@ export class PixelTransferService {
       }
     }
 
+    // Get ENS names with timeout protection
     for (const address in balances) {
-      const ens = await this.ethers.getCachedEnsName(address);
-      balances[address].ens = ens;
+      try {
+        const ens = await Promise.race([
+          this.ethers.getCachedEnsName(address),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('ENS timeout')), 2000))
+        ]);
+        balances[address].ens = ens;
+      } catch (error) {
+        this.logger.warn(`Failed to get ENS for ${address}:`, error.message);
+        balances[address].ens = null;
+      }
     }
 
-    // console.log('Final balances:', JSON.stringify(balances));
+    this.logger.log('Final balances:', JSON.stringify(balances, null, 2));
     return balances;
   }
 

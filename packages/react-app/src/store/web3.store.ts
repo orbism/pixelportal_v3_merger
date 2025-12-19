@@ -165,8 +165,14 @@ class Web3Store extends Reactionable(Web3providerStore) {
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   }
 
-  init() {
-    this.getPixelOwnershipMap();
+  async init() {
+    console.log('🚀 Web3Store.init() called');
+    try {
+      await this.getPixelOwnershipMap();
+      console.log('✅ Pixel ownership map loaded');
+    } catch (error) {
+      console.error('❌ Failed to load pixel ownership map:', error);
+    }
     this.getShibaDimensions();
     // this.getUSDPerPixel();
   }
@@ -245,12 +251,45 @@ class Web3Store extends Reactionable(Web3providerStore) {
     }
   }
 
-  getPixelOwnershipMap() {
-    return Http.get("/v1/config").then(({ data }) => (this.addressToPuppers = data));
+  async getPixelOwnershipMap() {
+    console.log('📡 Fetching pixel ownership map from server...');
+    console.log('📡 Current address:', this.address);
+    console.log('📡 API endpoint:', Http.defaults?.baseURL || 'unknown');
+    
+    try {
+      const response = await Http.get("/v1/config");
+      const data = response.data;
+      
+      console.log('✅ Pixel ownership data received');
+      console.log('✅ Response type:', typeof data);
+      console.log('✅ Response keys:', Object.keys(data));
+      console.log('✅ Number of addresses with pixels:', Object.keys(data).length);
+      console.log('✅ All addresses with pixels:', Object.keys(data));
+      console.log('🔍 Your address:', this.address);
+      console.log('🔍 Your address pixels:', data[this.address]);
+      console.log('🔍 Your address pixels (lowercase):', data[this.address?.toLowerCase()]);
+      console.log('📊 Full data:', JSON.stringify(data, null, 2));
+      
+      this.addressToPuppers = data;
+      return data;
+    } catch (error) {
+      console.error('❌ Failed to fetch pixel ownership:', error);
+      console.error('❌ Error details:', error.message);
+      if (error.response) {
+        console.error('❌ Response status:', error.response.status);
+        console.error('❌ Response data:', error.response.data);
+      }
+      throw error;
+    }
   }
 
   refreshPixelOwnershipMap() {
-    return Http.get("/v1/config/refresh").then(({ data }) => (this.addressToPuppers = data));
+    console.log('🔄 Refreshing pixel ownership map...');
+    return Http.get("/v1/config/refresh").then(({ data }) => {
+      console.log('✅ Pixel ownership refreshed:', data);
+      this.addressToPuppers = data;
+      return data;
+    });
   }
 
   getShibaDimensions() {
@@ -266,6 +305,13 @@ class Web3Store extends Reactionable(Web3providerStore) {
     if (this.address && this.address in this.addressToPuppers!) {
       myPuppers = this.addressToPuppers![this.address].tokenIds;
     }
+    // Debug logging
+    console.log('🔍 puppersOwned check:', {
+      address: this.address,
+      addressToPuppers: this.addressToPuppers,
+      myPuppers: myPuppers,
+      length: myPuppers.length
+    });
     return myPuppers;
   }
 
@@ -311,10 +357,16 @@ class Web3Store extends Reactionable(Web3providerStore) {
   }
 
   async getPupperBalance() {
-    if (!this.address) return BigNumber.from(0);
+    if (!this.address) return 0;
 
-    const res = await Http.get(`/v1/px/balance/${this.address}`);
-    return res.data.balance;
+    try {
+      const res = await Http.get(`/v1/px/balance/${this.address}`);
+      console.log('✅ Pupper balance from API:', res.data.balance);
+      return res.data.balance;
+    } catch (error) {
+      console.error('❌ Failed to fetch pupper balance:', error);
+      return 0;
+    }
   }
 
   async getPxOwnerByTokenId(tokenId: number) {

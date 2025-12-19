@@ -2,7 +2,7 @@ import { SimpleGetQuoteResponse } from "@cowprotocol/cow-sdk/dist/api/cow/types"
 import * as Sentry from "@sentry/react";
 import { BigNumber, Contract, ethers } from "ethers";
 import { formatUnits } from "ethers/lib/utils";
-import { computed, makeObservable, observable, toJS } from "mobx";
+import { computed, makeObservable, observable, toJS, runInAction } from "mobx";
 import erc20 from "../../contracts/erc20.json";
 import { showDebugToast, showErrorToast } from "../../DSL/Toast/Toast";
 import env from "../../environment";
@@ -195,28 +195,34 @@ class MintPixelsDialogStore extends Reactionable(Navigable<MintModalView, Constr
   }
 
   async getQuote() {
-    this.isLoading = true;
+    runInAction(() => {
+      this.isLoading = true;
+    });
+    
     if (this.srcCurrency === "DOG") {
       const dogAmount = Number(ethers.utils.formatUnits(AppStore.web3.DOG_TO_PIXEL_SATOSHIS.mul(this.pixelCount), 18));
-      this.recentQuote = {
-        srcCurrency: this.srcCurrency,
-        srcCurrencyAmount: dogAmount,
-        srcCurrencyFee: 0,
-        srcCurrencyTotal: dogAmount,
-        effectiveRate: 1,
-        dogAmount: dogAmount,
-        computedPixelCount: this.pixelCount.toString(),
-        maxPixelAmount: this.srcCurrencyBalance.humanReadable
-          ? Math.floor(
-              this.srcCurrencyBalance.humanReadable /
-                Number(ethers.utils.formatUnits(AppStore.web3.DOG_TO_PIXEL_SATOSHIS, 18)),
-            )
-          : 0,
-        _srcCurrencyAmount: AppStore.web3.DOG_TO_PIXEL_SATOSHIS.mul(this.pixelCount),
-        _srcCurrencyFee: BigNumber.from(0),
-        _srcCurrencyTotal: AppStore.web3.DOG_TO_PIXEL_SATOSHIS.mul(this.pixelCount),
-        _dogAmount: AppStore.web3.DOG_TO_PIXEL_SATOSHIS.mul(this.pixelCount),
-      };
+      
+      runInAction(() => {
+        this.recentQuote = {
+          srcCurrency: this.srcCurrency,
+          srcCurrencyAmount: dogAmount,
+          srcCurrencyFee: 0,
+          srcCurrencyTotal: dogAmount,
+          effectiveRate: 1,
+          dogAmount: dogAmount,
+          computedPixelCount: this.pixelCount.toString(),
+          maxPixelAmount: this.srcCurrencyBalance.humanReadable
+            ? Math.floor(
+                this.srcCurrencyBalance.humanReadable /
+                  Number(ethers.utils.formatUnits(AppStore.web3.DOG_TO_PIXEL_SATOSHIS, 18)),
+              )
+            : 0,
+          _srcCurrencyAmount: AppStore.web3.DOG_TO_PIXEL_SATOSHIS.mul(this.pixelCount),
+          _srcCurrencyFee: BigNumber.from(0),
+          _srcCurrencyTotal: AppStore.web3.DOG_TO_PIXEL_SATOSHIS.mul(this.pixelCount),
+          _dogAmount: AppStore.web3.DOG_TO_PIXEL_SATOSHIS.mul(this.pixelCount),
+        };
+      });
     } else {
       this.cowSimpleQuote = await AppStore.web3.cowStore.getQuoteForPixels({
         sellAddress: this.srcCurrencyDetails.contractAddress,
@@ -257,7 +263,10 @@ class MintPixelsDialogStore extends Reactionable(Navigable<MintModalView, Constr
         _dogAmount: BigNumber.from(this.cowSimpleQuote!.quote.buyAmount),
       };
     }
-    this.isLoading = false;
+    
+    runInAction(() => {
+      this.isLoading = false;
+    });
   }
 
   @computed

@@ -3,10 +3,10 @@
 *************************************************************************************************/
   
 const buildInfo = {
-  "branchName": "orbdev",
-  "lastHash": "753365e8fce827807ccbc6fd45327c22f7dcda2e",
-  "buildNumber": "#000006",
-  "buildTime": "2025-12-19T21:27:28.564Z"
+  "branchName": "orbdev-burnbtn",
+  "lastHash": "57c864d3273a674d1baf9b118537e8a2be2db0e0",
+  "buildNumber": "#000007",
+  "buildTime": "2025-12-19T22:14:00.072Z"
 }
 export default buildInfo;
   
