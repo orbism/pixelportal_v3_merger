@@ -19,10 +19,23 @@ export class DiscordService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
+    const discordEnabled = process.env.DISCORD_ENABLED === 'true';
+    
+    if (!discordEnabled) {
+      this.logger.log('Discord integration disabled');
+      return;
+    }
+    
+    const discordSecret = this.config.get('discord')?.secret;
+    if (!discordSecret) {
+      this.logger.warn('Discord secret not configured, skipping Discord integration');
+      return;
+    }
+    
     this.client = new Client({
       intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
     });
-    this.client.login(this.config.get('discord').secret);
+    this.client.login(discordSecret);
     this.client.once('ready', () => {
       this.logger.log('Auth success');
     });
@@ -37,6 +50,11 @@ export class DiscordService implements OnModuleInit {
     PixelTransferEventPayload,
     'event' | 'blockCreatedAt' | 'blockNumber'
   >) {
+    if (!this.client) {
+      this.logger.debug('Discord client not initialized, skipping post');
+      return;
+    }
+    
     this.logger.log(`Posting to discord:: (${tokenId}) ${from} -> ${to}`);
     const textContent = await this.imageGenerator.getTextContent(
       from,

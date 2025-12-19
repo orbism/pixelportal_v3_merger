@@ -37,7 +37,16 @@ export class EthersService implements OnModuleInit {
     private readonly basenames: BasenamesService,
   ) {
     const appEnv = this.configService.get('appEnv');
-    if (appEnv === AppEnv.production) {
+    const wsEndpoint = process.env.CB_WS_ENDPOINT || this.configService.get('cb')?.wsEndpoint;
+    
+    // Detect local Anvil by checking WebSocket URL
+    const isLocalAnvil = wsEndpoint && (wsEndpoint.includes('localhost:8545') || wsEndpoint.includes('127.0.0.1:8545'));
+    
+    if (isLocalAnvil) {
+      this.network = 'anvil-local';
+      this.chainId = 1337;
+      this.logger.log('Using local Anvil network (chainId: 1337)');
+    } else if (appEnv === AppEnv.production) {
       this.network = 'base-mainnet';
       this.chainId = 8453;
       this.networkService.setCurrentNetwork(Network.BASE_MAINNET);
