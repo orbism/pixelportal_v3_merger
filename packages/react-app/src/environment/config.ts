@@ -123,8 +123,8 @@ const config = {
   },
   api: {
     baseURL: getServerUrl(),
-    proxyURL: process.env.REACT_APP_SERVER_URL || 'http://localhost:3003',
-    l1: 'https://api.ownthedoge.com', // L1 API (Ethereum mainnet data)
+    proxyURL: chainId === 1337 || chainId === 31337 ? getServerUrl() : null,
+    l1: 'https://api.ownthedoge.com', // L1 API (Ethereum mainnet data) - only used for testnet/prod
   },
   app: {
     availableTokens: {
