@@ -420,6 +420,29 @@ class Web3Store extends Reactionable(Web3providerStore) {
     return this.pxContract!.burnPuppers(puppers);
   }
 
+  // Claim reserved pixels (V1/V2 migration)
+  async getReservedTokensForUser(address: string, limit: number = 100) {
+    if (!this.pxContract) {
+      throw new Error("PX contract not initialized");
+    }
+    return this.pxContract.getReservedTokensForUser(address, limit);
+  }
+
+  async claimReservedToken(tokenId: number) {
+    if (!this.pxContract) {
+      throw new Error("PX contract not initialized");
+    }
+    // Use simple claim version (uses default DOG20 token)
+    return this.pxContract.claimReservedToken(tokenId);
+  }
+
+  async canClaimReservedToken(tokenId: number, user: string) {
+    if (!this.pxContract) {
+      throw new Error("PX contract not initialized");
+    }
+    return this.pxContract.canClaimReservedToken(tokenId, user);
+  }
+
   pupperToIndexLocal(pupper: number) {
     return pupper - this.PIXEL_TO_ID_OFFSET;
   }

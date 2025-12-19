@@ -6,6 +6,7 @@ import ScrollHelperModal from "../../DSL/Modal/ScrollHelperModal";
 import AppStore from "../../store/App.store";
 import BurnPixelsModal from "./BurnPixelsModal/BurnPixelsModal";
 import MintPixelsModal from "./MintPixelsModal/MintPixelsModal";
+import ClaimPixelsModal from "../../common/ClaimPixels/ClaimPixelsModal";
 import IndexPane from "./Panes/IndexPane";
 import ManagePane from "./Panes/ManagePane";
 import SelectedPixelPane from "./Panes/SelectedPixelPane";
@@ -76,6 +77,18 @@ const Modals: React.FC<{ store: ViewerStore }> = observer(({ store }) => {
           onCompleteClose={() => {
             AppStore.modals.isBurnModalOpen = false;
             AppStore.modals.isBurnMemeModalOpen = false;
+          }}
+        />
+      )}
+      {AppStore.modals.isClaimModalOpen && (
+        <ClaimPixelsModal
+          isOpen={AppStore.modals.isClaimModalOpen}
+          onClose={() => (AppStore.modals.isClaimModalOpen = false)}
+          onSuccess={() => {
+            // Could add a claim meme modal if desired
+          }}
+          onCompleteClose={() => {
+            AppStore.modals.isClaimModalOpen = false;
           }}
         />
       )}

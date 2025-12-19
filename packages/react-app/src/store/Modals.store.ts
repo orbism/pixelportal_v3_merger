@@ -17,6 +17,7 @@ const SHOW_TOS_TOAST = "show_tos_toast";
 export enum ModalType {
   Mint,
   Burn,
+  Claim,
   Scroll,
   MintMeme,
   BurnMeme,
@@ -31,6 +32,9 @@ class ModalsStore {
 
   @observable
   isBurnModalOpen = false;
+
+  @observable
+  isClaimModalOpen = false;
 
   @observable
   isScrollModalOpen = false;
@@ -76,6 +80,7 @@ class ModalsStore {
   closeModals() {
     this.isMintModalOpen = false;
     this.isBurnModalOpen = false;
+    this.isClaimModalOpen = false;
     this.isScrollModalOpen = false;
     this.isMintMemeModalOpen = false;
     this.isBurnMemeModalOpen = false;
@@ -92,6 +97,9 @@ class ModalsStore {
         break;
       case ModalType.Burn:
         this.isBurnModalOpen = true;
+        break;
+      case ModalType.Claim:
+        this.isClaimModalOpen = true;
         break;
       case ModalType.Scroll:
         this.isScrollModalOpen = true;

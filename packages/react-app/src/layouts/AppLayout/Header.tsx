@@ -145,6 +145,19 @@ const Header = observer(() => {
                       Burn
                     </Button>
                   )}
+
+                  <Button
+                    size="sm"
+                    mr={8}
+                    onClick={() => {
+                      if (location.pathname !== "/" && !location.pathname.includes("/px")) {
+                        history.push("/");
+                      }
+                      AppStore.modals.openModal(ModalType.Claim);
+                    }}
+                  >
+                    Claim
+                  </Button>
                 </Flex>
               )}
               <Box>
