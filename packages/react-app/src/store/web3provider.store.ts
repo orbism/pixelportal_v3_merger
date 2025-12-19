@@ -35,15 +35,30 @@ class Web3providerStore {
 
   initializeProvider() {
     try {
-      const alchemyUrl = isProduction()
-        ? `https://base-mainnet.g.alchemy.com/v2/${env.app.alchemyKey}`
-        : `https://base-sepolia.g.alchemy.com/v2/${env.app.alchemyKey}`;
+      let rpcUrl: string;
+      let networkConfig: any;
 
-      const provider = new ethers.providers.JsonRpcProvider(alchemyUrl);
+      // Check if using local Anvil (chainId 1337)
+      if (env.app.targetChainId === 1337) {
+        rpcUrl = 'http://localhost:8545';
+        networkConfig = {
+          name: 'anvil-local',
+          chainId: 1337,
+        };
+        console.log("Using local Anvil RPC:", rpcUrl);
+      } else {
+        // Use Alchemy for testnet/mainnet
+        rpcUrl = isProduction()
+          ? `https://base-mainnet.g.alchemy.com/v2/${env.app.alchemyKey}`
+          : `https://base-sepolia.g.alchemy.com/v2/${env.app.alchemyKey}`;
+        console.log("Using Alchemy RPC:", rpcUrl);
+      }
+
+      const provider = new ethers.providers.JsonRpcProvider(rpcUrl, networkConfig);
 
       runInAction(() => {
         this.provider = provider;
-        console.log("Using JsonRpcProvider linked to Alchemy");
+        console.log("Provider initialized successfully");
       });
     } catch (error) {
       console.error("Failed to initialize provider:", error);

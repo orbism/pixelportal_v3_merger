@@ -14,7 +14,13 @@ import { isProduction } from "./environment/helpers";
 import { base, baseSepolia } from "viem/chains";
 import { ethers } from "ethers";
 
-const targetChain = isProduction() ? base : baseSepolia;
+// Define Anvil local chain (matching index.tsx configuration)
+const anvilLocal = {
+  id: 1337,
+  name: 'Anvil Local',
+};
+
+const targetChain = isProduction() ? base : anvilLocal;
 
 const logAppVersionToConsole = () => {
   var styleArray = [

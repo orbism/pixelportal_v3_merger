@@ -1,7 +1,8 @@
 import deployedContracts from "../contracts/hardhat_contracts.json";
 
-const targetChainId = 84532;
-const targetNetworkName = "base-sepolia";
+// Use local Anvil for development
+const targetChainId = 1337;
+const targetNetworkName = "anvil-local";
 
 const developmentEnv = {
   api: {

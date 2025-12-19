@@ -352,7 +352,8 @@ class Web3Store extends Reactionable(Web3providerStore) {
     if (forcedGasLimit) {
       overrides = { gasLimit: forcedGasLimit };
     }
-    return this.pxContract!.mintPuppers(pixel_amount, overrides);
+    // New Foundry contract requires tokenAddress as second parameter
+    return this.pxContract!.mintPuppers(pixel_amount, this.dogContractAddress, overrides);
   }
 
   pupperToPixelCoords(pupper: number) {

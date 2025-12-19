@@ -13,20 +13,35 @@ import { ToastContainer } from "./DSL/Toast/Toast";
 
 import { CreateConfigParameters, WagmiProvider, createConfig, http } from "wagmi";
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
-import { base, baseSepolia, type Chain } from "wagmi/chains";
+import { base, baseSepolia, foundry, type Chain } from "wagmi/chains";
 import { coinbaseWallet, magicEdenWallet } from "@rainbow-me/rainbowkit/wallets";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { isProduction } from "./environment/helpers";
 
-const targetChain = isProduction() ? base : baseSepolia;
+// Define Anvil local chain
+const anvilLocal: Chain = {
+  ...foundry,
+  id: 1337,
+  name: 'Anvil Local',
+  network: 'anvil-local',
+  rpcUrls: {
+    default: { http: ['http://localhost:8545'] },
+    public: { http: ['http://localhost:8545'] },
+  },
+};
 
-Sentry.init({
-  dsn: process.env.REACT_APP_SENTRY_DSN,
-  integrations: [new Integrations.BrowserTracing()],
-  tracesSampleRate: 1.0,
-});
+const targetChain = isProduction() ? base : anvilLocal;
+
+// Only initialize Sentry in production to avoid CORS issues with Anvil
+if (isProduction() || process.env.NODE_ENV === 'production') {
+  Sentry.init({
+    dsn: process.env.REACT_APP_SENTRY_DSN,
+    integrations: [new Integrations.BrowserTracing()],
+    tracesSampleRate: 1.0,
+  });
+}
 
 const customLightTheme = lightTheme({
   borderRadius: "none",
