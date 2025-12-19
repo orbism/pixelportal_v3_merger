@@ -1,0 +1,422 @@
+import { HttpService } from '@nestjs/axios';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleInit,
+  forwardRef,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import { TokenType } from '@prisma/client';
+import { Provider, Signer, WebSocketProvider, ethers } from 'ethers';
+import { Configuration } from '../config/configuration';
+import * as KobosuJson from '../constants/kobosu.json';
+import * as ABI from '../contracts/hardhat_contracts.json';
+import * as contractData from '../contracts/hardhat_contracts.json';
+import { CurrencyService } from '../currency/currency.service';
+import { EthersService } from '../ethers/ethers.service';
+import { Events, PixelTransferEventPayload } from '../events';
+import { PixelTransferService } from '../pixel-transfer/pixel-transfer.service';
+import { stringify } from '../utils';
+
+@Injectable()
+export class OwnTheDogeContractService implements OnModuleInit {
+  private readonly logger = new Logger(OwnTheDogeContractService.name);
+  private pxContract: ethers.Contract;
+  private dogContract: ethers.Contract;
+  private pxContractAddress: string;
+  private dogContractAddress: string;
+  private dripDogSigner: ethers.Wallet;
+
+  public imageWidth = 640;
+  public imageHeight = 480;
+  private pixelToIDOffset = 1000000;
+
+  constructor(
+    @Inject(forwardRef(() => PixelTransferService))
+    private pixelTransferService: PixelTransferService,
+    private ethersService: EthersService,
+    private configService: ConfigService<Configuration>,
+    private eventEmitter: EventEmitter2,
+    private http: HttpService,
+    private currency: CurrencyService,
+  ) {}
+
+  async onModuleInit() {
+    if (!this.isConnectedToContracts && this.ethersService.provider) {
+      this.onProviderConnected(this.ethersService.provider);
+    }
+  }
+
+  @OnEvent(Events.ETHERS_WS_PROVIDER_CONNECTED)
+  async handleProviderConnected(provider: WebSocketProvider) {
+    this.onProviderConnected(provider);
+  }
+
+  get isConnectedToContracts() {
+    return !!this.pxContract && !!this.dogContract;
+  }
+
+  private async onProviderConnected(provider: ethers.WebSocketProvider) {
+    const logMessage = 'Provider connected';
+    this.logger.log(logMessage);
+
+    this.dripDogSigner = new ethers.Wallet(
+      this.configService.get('dripKey'),
+      provider,
+    );
+    await this.connectToContracts(provider);
+    this.initPixelListener();
+    await this.pixelTransferService.syncRecentTransfers();
+    await this.upsertDogCurrency();
+  }
+
+  private async fetchSymbol(contract: ethers.Contract) {
+    try {
+      return await contract.symbol();
+    } catch (error) {
+      this.logger.error('Failed to fetch symbol:', error);
+      throw error;
+    }
+  }
+
+  private async upsertDogCurrency() {
+    // Ensure the dogContract is connected
+    if (!this.dogContract) {
+      this.logger.error('dogContract is not initialized.');
+      throw new Error('dogContract is not initialized.');
+    }
+
+    const symbol = await this.fetchSymbol(this.dogContract);
+    const name = await this.dogContract.name();
+    let decimals = await this.dogContract.decimals();
+    // const { dog: contractAddress } = this.getContractAddresses();
+    // const contractAddress = '0xF8b0C52f505B2177cB1A535329F6fA8a927e7a06';
+    const networkId = this.ethersService.chainId.toString();
+    const networkName = this.ethersService.network;
+    const contractAddress =
+      contractData[networkId][networkName].contracts.DOG20.address;
+    this.logger.debug(`Contract Address: ${contractAddress}`);
+
+    if (typeof decimals === 'bigint') {
+      decimals = Number(decimals);
+    }
+
+    if (!contractAddress) {
+      this.logger.error('Contract address is undefined');
+      throw new Error('Contract address is undefined');
+    }
+
+    await this.currency.upsert({
+      where: {
+        contractAddress: contractAddress.toString(),
+      },
+      create: {
+        contractAddress: contractAddress.toString(),
+        type: TokenType.ERC20,
+        symbol,
+        name,
+        decimals,
+      },
+      update: {},
+    });
+  }
+
+  async connectToContracts(provider: ethers.WebSocketProvider) {
+    this.logger.log('Connecting to contracts...');
+    this.logger.log(
+      `Network: ${this.ethersService.network}, Chain ID: ${this.ethersService.chainId}`,
+    );
+
+    const networkId = this.ethersService.chainId.toString();
+    const networkName = this.ethersService.network;
+    const pxDetails = contractData[networkId][networkName].contracts.PX;
+    const dogDetails = contractData[networkId][networkName].contracts.DOG20;
+    const pxABI = pxDetails.abi;
+    const dogABI = dogDetails.abi;
+    this.pxContractAddress = pxDetails.address;
+    this.dogContractAddress = dogDetails.address;
+
+    try {
+      this.pxContract = new ethers.Contract(
+        this.pxContractAddress,
+        pxABI,
+        provider,
+      );
+      this.dogContract = new ethers.Contract(
+        this.dogContractAddress,
+        dogABI,
+        provider,
+      );
+      this.logger.log(`Contracts initialized successfully.`);
+    } catch (error) {
+      this.logger.error('Error initializing contracts:', error);
+      throw error;
+    }
+
+    this.logger.log(
+      `Contracts connected: PX at ${this.pxContractAddress}, DOG at ${this.dogContractAddress}`,
+    );
+  }
+
+  async getPxContract(signerOrProvider: Signer | Provider) {
+    const pxContractInfo =
+      ABI[this.ethersService.chainId][this.ethersService.network].contracts[
+        'PX'
+      ];
+    return new ethers.Contract(
+      pxContractInfo.address,
+      pxContractInfo.abi,
+      signerOrProvider,
+    );
+  }
+
+  async getDogContract(signerOrProvider: any) {
+    const dogContractInfo =
+      ABI[this.ethersService.chainId][this.ethersService.network].contracts[
+        'DOG20'
+      ];
+    return new ethers.Contract(
+      dogContractInfo.address,
+      dogContractInfo.abi,
+      signerOrProvider,
+    );
+  }
+
+  private initPixelListener() {
+    this.logger.log(`initPixelListener`);
+    this.logger.log(`Listening to pixel transfer events`);
+
+    this.pxContract.on('Transfer', async (from, to, tokenId, event) => {
+      this.logger.log(`new transfer event hit: (${tokenId}) ${from} -> ${to}`);
+
+      // this.logger.log(`got new event - details: ${stringify(event)}`);
+      //this.logger.log(`new event details: blockNumber=${event.blockNumber}, blockHash=${event.blockHash}, transactionHash=${event.transactionHash}, logIndex=${event.logIndex}`);
+      // console.log('Event Object Keys:', Object.keys(event));
+      // console.log('Event:', event);
+      // if (event.args) {
+      //     console.log('Event Args:', event.args);
+      // }
+
+      this.logger.log(
+        `got new event - details: ${JSON.stringify(
+          event,
+          (key, value) =>
+            typeof value === 'bigint' ? value.toString() : value,
+          2,
+        )}`,
+      );
+
+      // const blockNumber = event.log.blockNumber || (event.args && event.args.blockNumber);
+      const blockNumber = event.log.blockNumber;
+      if (!blockNumber) {
+        this.logger.error('Block number is undefined in the event object.');
+        return;
+      }
+      const blockCreatedAt =
+        await this.ethersService.getDateTimeFromBlockNumber(blockNumber);
+      const payload: PixelTransferEventPayload = {
+        from,
+        to,
+        tokenId: Number(tokenId),
+        blockNumber,
+        blockCreatedAt,
+        event: { ...event.log, blockNumber }, // blockNumber EXPLICITLY
+        // event: {
+        //   blockHash: event.blockHash,
+        //   transactionHash: event.transactionHash,
+        //   logIndex: event.logIndex,
+        // },
+      };
+      this.eventEmitter.emit(Events.PIXEL_TRANSFER, payload);
+    });
+  }
+
+  async getAllPixelTransferLogs() {
+    const from = this.configService.get('pixelContractDeploymentBlockNumber');
+    return this.getPixelTransferLogs(from);
+  }
+
+  async getPixelTransferLogs(fromBlock: number, _toBlock?: number) {
+    // get logs from the chain chunked by 5k blocks
+    // infura will only return 10k logs per request
+    const toBlock = _toBlock
+      ? _toBlock
+      : await this.ethersService.provider.getBlockNumber();
+    this.logger.log(
+      `Getting pixel transfers from block: ${fromBlock} to block: ${toBlock}`,
+    );
+    const logs = [];
+    const step = 5000;
+    const filter = this.pxContract.filters.Transfer(null, null);
+
+    this.logger.log(`pxContract Address: ${this.pxContract.target}`);
+    this.logger.log(
+      `pxContract Chain ID: ${await this.ethersService.provider
+        .getNetwork()
+        .then((net) => net.chainId)}`,
+    );
+
+    for (let i = fromBlock; i <= toBlock; i += step + 1) {
+      const _logs = await this.pxContract.queryFilter(filter, i, i + step);
+      this.logger.log(`Got pixel transfer logs of length: ${_logs.length}`);
+      logs.push(..._logs);
+    }
+    this.logger.log(`Got pixel transfer logs of length: ${logs.length}`);
+    return logs;
+  }
+
+  getDogLocked() {
+    try {
+      if (!this.pxContract) {
+        this.logger.error('PX Contract is not initialized.');
+        throw new Error('PX Contract is not initialized.');
+      }
+      this.logger.log(
+        `Checking locked DOG balance at contract address: ${this.pxContractAddress}`,
+      );
+      return this.dogContract.balanceOf(this.pxContractAddress);
+    } catch (error) {
+      this.logger.error(`Failed to get locked DOG balance: ${error.message}`);
+      throw new Error('Failed to get locked DOG balance');
+    }
+  }
+
+  private getTreasuryBalance() {
+    return this.dogContract.balanceOf(
+      '0x563B1AE9717e9133b0C70D073C931368E1bd86E5',
+    );
+  }
+
+  private getPleasrBalance() {
+    return this.dogContract.balanceOf(
+      '0xf894FeA045ECCB2927e2E0CB15C12debEE9f2BE8',
+    );
+  }
+
+  private async getCirculatingSupply() {
+    return this.dogContract.totalSupply();
+  }
+
+  // async getPercentDogInPixels() {
+  //   const dogLocked = await this.getDogLocked();
+  //   const totalSupply = await this.getCirculatingSupply();
+  //   const treasuryBalance = await this.getTreasuryBalance();
+  //   const pleasrBalance = await this.getPleasrBalance();
+  //   const supply = totalSupply.sub(treasuryBalance).sub(pleasrBalance);
+  //   return Number(dogLocked.toString() / supply.toString()) * 100;
+  // }
+
+  getContractAddresses() {
+    // Log the actual addresses to debug
+    this.logger.debug(
+      `DOG Contract Address: ${
+        this.dogContract ? this.dogContractAddress : 'undefined'
+      }`,
+    );
+    this.logger.debug(
+      `PX Contract Address: ${
+        this.pxContract ? this.pxContractAddress : 'undefined'
+      }`,
+    );
+
+    return {
+      dog: this.dogContract ? this.dogContractAddress : undefined,
+      pixel: this.pxContract ? this.pxContractAddress : undefined,
+    };
+  }
+
+  getPixelURI(tokenId: string) {
+    return this.pxContract.tokenURI(tokenId);
+  }
+
+  async getDimensions() {
+    try {
+      const width = await this.pxContract.SHIBA_WIDTH();
+      const height = await this.pxContract.SHIBA_HEIGHT();
+
+      if (!width || !height) {
+        throw new Error('Failed to fetch dimensions from the contract.');
+      }
+
+      const widthNumber = typeof width === 'bigint' ? width.toString() : width;
+      const heightNumber =
+        typeof height === 'bigint' ? height.toString() : height;
+
+      return {
+        width: widthNumber,
+        height: heightNumber,
+      };
+    } catch (error) {
+      this.logger.error('Failed to get dimensions:', error);
+      throw error;
+    }
+  }
+
+  async getPixelOwner(tokenId: number) {
+    return this.pxContract.ownerOf(tokenId);
+  }
+
+  getPixelBalanceByAddress(address: string) {
+    return this.pxContract.balanceOf(address);
+  }
+
+  pixelToIndexLocal(pixel: number) {
+    return pixel - this.pixelToIDOffset;
+  }
+
+  pixelToCoordsLocal(pixel: number) {
+    const index = this.pixelToIndexLocal(pixel);
+    return [index % this.imageWidth, Math.floor(index / this.imageWidth)];
+  }
+
+  pixelToHexLocal(pixel: number) {
+    const [x, y] = this.pixelToCoordsLocal(pixel);
+    return KobosuJson[y][x];
+  }
+
+  async getTokenMetadata(tokenId: string) {
+    // todo instead of querying the contract -- query the DB first to ensure the token has been minted actually
+    const uri = await this.getPixelURI(tokenId);
+    return this.http.get(uri).toPromise();
+  }
+
+  async sendDogToAddressFromDripAddress(to: string, amount: number) {
+    const amountAtoms = ethers.parseEther(amount.toString());
+    console.log(`sending: ${amountAtoms} -- to: ${to}`);
+    const contract = await this.getDogContract(this.dripDogSigner);
+    return contract['transfer'](to, amountAtoms);
+  }
+
+  async getDogDripBalance() {
+    return this.dogContract.balanceOf(this.dripDogSigner.address);
+  }
+
+  getDogDripAddress() {
+    return this.dripDogSigner.address;
+  }
+
+  // async getEthTxFeesForERC20Transfer(from, to, amount) {
+  //   const gasLimit = await this.dogContract.estimateGas.transfer(to, amount, {
+  //     from,
+  //   });
+  //   const gasPrice = await this.ethersService.provider.getGasPrice();
+  //   const gasCost = gasLimit.mul(gasPrice);
+  //   return gasCost.toString();
+  // }
+
+  async getEthTxFeesForERC20Transfer(from, to, amount) {
+    const gasLimit = await this.dogContract.transfer(to, amount, {
+      from,
+    });
+    const feeData = await this.ethersService.provider.getFeeData();
+    const gasPrice = feeData.gasPrice;
+    const gasCost = gasLimit.mul(gasPrice);
+    return gasCost.toString();
+  }
+
+  async getDripEthBalance() {
+    return this.ethersService.provider.getBalance(this.dripDogSigner.address);
+  }
+}

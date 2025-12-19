@@ -1,0 +1,121 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model PixelTransfers {
+  id               Int      @id @default(autoincrement())
+  blockNumber      Int
+  blockCreatedAt   DateTime
+  insertedAt       DateTime @default(now())
+  updatedAt        DateTime @default(now())
+  from             String
+  to               String
+  tokenId          Int
+  uniqueTransferId String   @unique
+}
+
+enum ClientSide {
+  BUY
+  SELL
+}
+
+enum EthereumNetwork {
+  MAINNET
+  POLYGON
+  ARBITRUM
+}
+
+model RainbowSwaps {
+  id                     Int              @id @default(autoincrement())
+  blockNumber            Int
+  blockCreatedAt         DateTime
+  insertedAt             DateTime         @default(now())
+  updatedAt              DateTime         @default(now())
+  baseCurrency           String
+  quoteCurrency          String
+  baseAmount             Float
+  quoteAmount            Float
+  clientSide             ClientSide
+  txHash                 String           @unique
+  clientAddress          String
+  donatedCurrency        String
+  donatedAmount          Float
+  baseCurrencyAddress    String?
+  quoteCurrencyAddress   String?
+  donatedCurrencyAddress String?
+  network                EthereumNetwork?
+}
+
+enum ChainName {
+  DOGECOIN
+  ETHEREUM
+}
+
+enum Campaign {
+  STATUE
+  PH
+}
+
+model Donations {
+  id                      Int                   @id @default(autoincrement())
+  blockNumber             Int
+  blockCreatedAt          DateTime
+  fromAddress             String
+  toAddress               String
+  blockchain              ChainName
+  currency                String
+  currencyContractAddress String?
+  txHash                  String                @unique
+  amount                  Float
+  campaign                Campaign              @default(STATUE)
+  WebhookRequests         DonationHookRequest[]
+}
+
+model DonationHookRequest {
+  id           Int       @id @default(autoincrement())
+  insertedAt   DateTime  @default(now())
+  donationId   Int
+  donation     Donations @relation(fields: [donationId], references: [id])
+  url          String
+  attempt      Int       @default(0)
+  isSuccessful Boolean   @default(false)
+  responseCode Int?
+  response     String?
+}
+
+enum TokenType {
+  ERC20
+  ERC721
+  ERC1155
+}
+
+model CurrencyDrip {
+  id                  Int      @id @default(autoincrement())
+  insertedAt          DateTime @default(now())
+  from                String
+  to                  String
+  currencyTokenId     String?
+  currencyAmountAtoms String
+  currencyId          Int
+  currency            Currency @relation(fields: [currencyId], references: [id])
+  txId                String   @unique
+}
+
+model Currency {
+  id              Int            @id @default(autoincrement())
+  type            TokenType
+  contractAddress String         @unique
+  decimals        Int
+  symbol          String?
+  name            String?
+  CurrencyDrip    CurrencyDrip[]
+}
