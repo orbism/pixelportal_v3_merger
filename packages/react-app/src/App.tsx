@@ -10,17 +10,14 @@ import AppStore from "./store/App.store";
 
 import { useWalletClient } from "wagmi";
 
-import { isProduction } from "./environment/helpers";
-import { base, baseSepolia } from "viem/chains";
+import envConfig from "./environment/config";
 import { ethers } from "ethers";
 
-// Define Anvil local chain (matching index.tsx configuration)
-const anvilLocal = {
-  id: 1337,
-  name: 'Anvil Local',
+// Use environment-driven chain configuration
+const targetChain = {
+  id: envConfig.chain.id,
+  name: envConfig.chain.name,
 };
-
-const targetChain = isProduction() ? base : anvilLocal;
 
 const logAppVersionToConsole = () => {
   var styleArray = [

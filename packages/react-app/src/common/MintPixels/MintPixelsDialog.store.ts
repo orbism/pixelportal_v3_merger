@@ -302,7 +302,11 @@ class MintPixelsDialogStore extends Reactionable(Navigable<MintModalView, Constr
   async mintPixels(amount: number) {
     this.hasUserSignedTx = false;
     try {
-      const estimatedGas = await AppStore.web3.pxContract?.estimateGas.mintPuppers(amount);
+      // New Foundry contract requires tokenAddress as second parameter
+      const estimatedGas = await AppStore.web3.pxContract?.estimateGas.mintPuppers(
+        amount,
+        AppStore.web3.dogContractAddress
+      );
       if (!estimatedGas) {
         throw Error("Could not estimate gas");
       }

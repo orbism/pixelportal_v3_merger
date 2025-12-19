@@ -18,26 +18,43 @@ import { coinbaseWallet, magicEdenWallet } from "@rainbow-me/rainbowkit/wallets"
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { isProduction } from "./environment/helpers";
+import envConfig from "./environment/config";
 
-// Define Anvil local chain
-const anvilLocal: Chain = {
-  ...foundry,
-  id: 1337,
-  name: 'Anvil Local',
-  network: 'anvil-local',
-  rpcUrls: {
-    default: { http: ['http://localhost:8545'] },
-    public: { http: ['http://localhost:8545'] },
-  },
+// Build chain configuration from environment
+const buildTargetChain = (): Chain => {
+  // Start with foundry as base for local chains
+  const baseChain = envConfig.chain.id === 1337 || envConfig.chain.id === 31337 
+    ? { ...foundry } 
+    : {};
+
+  return {
+    ...baseChain,
+    id: envConfig.chain.id,
+    name: envConfig.chain.name,
+    network: envConfig.chain.name.toLowerCase().replace(/\s+/g, '-'),
+    nativeCurrency: {
+      name: 'Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+    rpcUrls: {
+      default: { http: [envConfig.chain.rpcUrl] },
+      public: { http: [envConfig.chain.rpcUrl] },
+    },
+    blockExplorers: envConfig.chain.id === 8453 
+      ? { default: { name: 'BaseScan', url: 'https://basescan.org' } }
+      : envConfig.chain.id === 84532
+      ? { default: { name: 'BaseScan', url: 'https://sepolia.basescan.org' } }
+      : undefined,
+  } as Chain;
 };
 
-const targetChain = isProduction() ? base : anvilLocal;
+const targetChain = buildTargetChain();
 
 // Only initialize Sentry in production to avoid CORS issues with Anvil
-if (isProduction() || process.env.NODE_ENV === 'production') {
+if (envConfig.isProduction && envConfig.services.sentryDsn) {
   Sentry.init({
-    dsn: process.env.REACT_APP_SENTRY_DSN,
+    dsn: envConfig.services.sentryDsn,
     integrations: [new Integrations.BrowserTracing()],
     tracesSampleRate: 1.0,
   });
@@ -72,7 +89,7 @@ const connectors = connectorsForWallets(
   ],
   {
     appName: "Own The Doge: Pixel Portal",
-    projectId: process.env.REACT_APP_WALLETCONNECT_PROJECTID,
+    projectId: envConfig.services.walletConnectProjectId,
   },
 );
 
