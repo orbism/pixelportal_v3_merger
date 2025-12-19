@@ -13,4 +13,4 @@ if (!isDevModeEnabled()) {
   envConfig.api.proxyURL = null;
 }
 
-export { envConfig as default };
+export default envConfig;

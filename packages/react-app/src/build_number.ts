@@ -3,10 +3,10 @@
 *************************************************************************************************/
   
 const buildInfo = {
-  "branchName": "orbdev-frontend",
-  "lastHash": "7d658a5dfc61394994668ba344cbef40034865b9",
-  "buildNumber": "#000005",
-  "buildTime": "2025-12-19T19:57:33.119Z"
+  "branchName": "orbdev",
+  "lastHash": "753365e8fce827807ccbc6fd45327c22f7dcda2e",
+  "buildNumber": "#000006",
+  "buildTime": "2025-12-19T21:27:28.564Z"
 }
 export default buildInfo;
   
