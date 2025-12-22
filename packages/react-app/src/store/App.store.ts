@@ -5,6 +5,7 @@ import RWDStore from "./RWD.store";
 import Web3Store from "./web3.store";
 import Web3providerStore from "./web3provider.store";
 import L1Store from "./L1.store";
+import GuideStore from "./Guide.store";
 
 class _AppStore {
   @observable
@@ -22,6 +23,9 @@ class _AppStore {
   @observable
   l1: L1Store;
 
+  @observable
+  guide: GuideStore;
+
   constructor() {
     makeObservable(this);
     this.web3 = new Web3Store();
@@ -29,6 +33,7 @@ class _AppStore {
     this.modals = new ModalsStore();
     this.web3Provider = new Web3providerStore();
     this.l1 = new L1Store();
+    this.guide = new GuideStore();
 
     reaction(
       () => this.web3Provider.signer,
@@ -61,6 +66,7 @@ class _AppStore {
     this.web3.init();
     this.modals.init();
     this.l1.init();
+    this.guide.init();
   }
 }
 

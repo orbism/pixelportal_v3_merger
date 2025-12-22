@@ -11,6 +11,7 @@ import Footer from "../../common/Footer/Footer";
 import AppStore from "../../store/App.store";
 import Header from "./Header";
 import NavLinks from "./NavLinks";
+import GuideOverlay from "../../components/SiteGuide/GuideOverlay";
 
 interface AppLayoutProps {
   children?: any;
@@ -35,6 +36,7 @@ const AppLayout = observer(function AppLayout({ children }: AppLayoutProps) {
         </Box>
       </Flex>
       <MobileNav />
+      {AppStore.guide.isGuideActive && <GuideOverlay />}
     </>
   );
 });
