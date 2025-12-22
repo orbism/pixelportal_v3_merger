@@ -6,6 +6,7 @@ import Typography, { TVariant } from "../../DSL/Typography/Typography";
 import { lightOrDarkMode } from "../../DSL/Theme";
 import GuideHighlight from "./GuideHighlight";
 import GuideModal from "./GuideModal";
+import DPPLogo from "../../images/logo.png";
 
 const GuideOverlay: React.FC = observer(() => {
   const { colorMode } = useColorMode();
@@ -18,9 +19,32 @@ const GuideOverlay: React.FC = observer(() => {
     if (!currentStep) return;
 
     let highlightedElement: HTMLElement | null = null;
-    let originalStyles: { position: string; zIndex: string } = { position: '', zIndex: '' };
+    let logoElement: HTMLElement | null = null;
+    let originalStyles: { position: string; zIndex: string; pointerEvents: string } = { 
+      position: '', 
+      zIndex: '', 
+      pointerEvents: '' 
+    };
+    let originalLogoStyles: { zIndex: string; pointerEvents: string } = { 
+      zIndex: '', 
+      pointerEvents: '' 
+    };
+    let originalBodyPointerEvents = '';
 
     const updateTarget = () => {
+      // OPTION 1B: Always boost logo z-index and enable pointer events
+      logoElement = document.querySelector('[data-guide-target="logo"]') as HTMLElement;
+      if (logoElement) {
+        originalLogoStyles.zIndex = logoElement.style.zIndex || '';
+        originalLogoStyles.pointerEvents = logoElement.style.pointerEvents || '';
+        logoElement.style.zIndex = '10015';
+        logoElement.style.pointerEvents = 'auto';
+      }
+
+      // OPTION 2A: Block all pointer events on body
+      originalBodyPointerEvents = document.body.style.pointerEvents || '';
+      document.body.style.pointerEvents = 'none';
+
       // Special handling for 'body' (welcome step)
       if (currentStep.targetElement === 'body') {
         setTargetRect(null);
@@ -38,10 +62,13 @@ const GuideOverlay: React.FC = observer(() => {
         highlightedElement = element;
         originalStyles.position = element.style.position || '';
         originalStyles.zIndex = element.style.zIndex || '';
+        originalStyles.pointerEvents = element.style.pointerEvents || '';
         
         // Boost z-index to appear above overlay
         element.style.position = element.style.position || 'relative';
         element.style.zIndex = '10001';
+        // OPTION 2A: Enable pointer events on highlighted element
+        element.style.pointerEvents = 'auto';
 
         const rect = element.getBoundingClientRect();
         setTargetRect(rect);
@@ -97,7 +124,13 @@ const GuideOverlay: React.FC = observer(() => {
       if (highlightedElement) {
         highlightedElement.style.position = originalStyles.position;
         highlightedElement.style.zIndex = originalStyles.zIndex;
+        highlightedElement.style.pointerEvents = originalStyles.pointerEvents;
       }
+      if (logoElement) {
+        logoElement.style.zIndex = originalLogoStyles.zIndex;
+        logoElement.style.pointerEvents = originalLogoStyles.pointerEvents;
+      }
+      document.body.style.pointerEvents = originalBodyPointerEvents;
       window.removeEventListener('resize', updateTarget);
       window.removeEventListener('scroll', updateTarget);
     };
@@ -167,12 +200,75 @@ const GuideOverlay: React.FC = observer(() => {
         />
       )}
 
+      {/* EXIT GUIDE Badge - Option 1B */}
+      <Flex
+        position="fixed"
+        top="60px"
+        left="20px"
+        zIndex={10015}
+        bg={lightOrDarkMode(colorMode, "yellow.50", "purple.700")}
+        border="2px solid"
+        borderColor={lightOrDarkMode(colorMode, "black", "white")}
+        borderRadius="8px"
+        px={3}
+        py={2}
+        alignItems="center"
+        gap={2}
+        cursor="pointer"
+        onClick={() => AppStore.guide.skipGuide()}
+        pointerEvents="auto"
+        boxShadow="0 4px 12px rgba(0, 0, 0, 0.4)"
+        _hover={{
+          transform: "translateY(-2px)",
+          boxShadow: "0 6px 16px rgba(0, 0, 0, 0.5)",
+        }}
+        _active={{
+          transform: "translateY(0px)",
+        }}
+        transition="all 200ms ease-in-out"
+        style={{
+          animation: "subtlePulse 2s ease-in-out infinite",
+        }}
+      >
+        <Box
+          borderRadius="full"
+          overflow="hidden"
+          borderWidth={1}
+          borderColor={lightOrDarkMode(colorMode, "black", "white")}
+        >
+          <img src={DPPLogo} width={32} height={32} alt="Exit Guide" />
+        </Box>
+        <Typography
+          variant={TVariant.PresStart10}
+          color={lightOrDarkMode(colorMode, "black", "white")}
+          whiteSpace="nowrap"
+        >
+          Click to Exit
+        </Typography>
+      </Flex>
+
       {/* Guide modal */}
       <GuideModal
         content={currentStep.content}
         position={modalPosition}
         onClose={handleClose}
       />
+
+      {/* Subtle pulse animation for EXIT badge */}
+      <style>
+        {`
+          @keyframes subtlePulse {
+            0%, 100% { 
+              opacity: 1;
+              transform: scale(1);
+            }
+            50% { 
+              opacity: 0.95;
+              transform: scale(1.02);
+            }
+          }
+        `}
+      </style>
     </>
   );
 });

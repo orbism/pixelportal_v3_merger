@@ -144,18 +144,18 @@ const Header = observer(() => {
                   {(AppStore.web3.puppersOwned.length > 0 || isGuideModeActive) && (
                     <Box data-guide-target="burn-button">
                       <Button
-                        size="sm"
-                        mr={8}
-                        onClick={() => {
-                          if (location.pathname !== "/" && !location.pathname.includes("/px")) {
-                            history.push("/");
-                          }
+                    size="sm"
+                    mr={8}
+                    onClick={() => {
+                      if (location.pathname !== "/" && !location.pathname.includes("/px")) {
+                        history.push("/");
+                      }
                           AppStore.modals.openModal(ModalType.Burn);
                         }}
                         isDisabled={isGuideModeActive && AppStore.web3.puppersOwned.length === 0}
                       >
                         Burn
-                      </Button>
+                  </Button>
                     </Box>
                   )}
 
@@ -182,7 +182,7 @@ const Header = observer(() => {
             </Flex>
 
             <Box data-guide-target="wallet-button">
-              <ConnectWalletButton />
+            <ConnectWalletButton />
             </Box>
           </Box>
         </Flex>
