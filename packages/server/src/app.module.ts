@@ -28,6 +28,9 @@ import { PixelTransferRepository } from './pixel-transfer/pixel-transfer.reposit
 import { PixelTransferService } from './pixel-transfer/pixel-transfer.service';
 import { PrismaService } from './prisma.service';
 import { UnstoppableDomainsService } from './unstoppable-domains/unstoppable-domains.service';
+import { EmailService } from './email/email.service';
+import { SupportController } from './support/support.controller';
+import { SupportService } from './support/support.service';
 
 @Module({
   imports: [
@@ -57,7 +60,7 @@ import { UnstoppableDomainsService } from './unstoppable-domains/unstoppable-dom
     }),
     ScheduleModule.forRoot(),
   ],
-  controllers: [AppController, IndexController],
+  controllers: [AppController, IndexController, SupportController],
   providers: [
     PrismaService,
     EthersService,
@@ -81,6 +84,8 @@ import { UnstoppableDomainsService } from './unstoppable-domains/unstoppable-dom
     CurrencyDripService,
     CurrencyService,
     NetworkService,
+    EmailService,
+    SupportService,
   ],
 })
 export class AppModule {}

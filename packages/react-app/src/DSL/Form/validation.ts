@@ -27,9 +27,40 @@ const noNegativeBalances = (customString?: string) => (value: any) => {
   // return !AppStore.balances.userHasNegativeBalances ? undefined : stringToReturn
 };
 
+const isValidEmail = (value: any) => {
+  if (!value) return undefined; // Allow empty for optional fields
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(value) ? undefined : "Please enter a valid email address";
+};
+
+const atLeastOneContact = (value: any, allValues?: any) => {
+  // Don't validate if allValues is not available yet
+  if (!allValues) return undefined;
+  
+  const { email, discordUsername, telegramUsername, xUsername } = allValues;
+  
+  // If at least one contact field has a value, validation passes
+  if (email || discordUsername || telegramUsername || xUsername) {
+    return undefined;
+  }
+  
+  // Only show error if none of the contact fields have values
+  return "Please provide at least one contact method";
+};
+
 const composeValidators =
   (...validators: any[]) =>
   (value: any) =>
     validators.reduce((error, validator) => error || validator(value), undefined);
 
-export { required, mustBeANumber, minValue, maxValue, exactLength, noNegativeBalances, composeValidators };
+export {
+  required,
+  mustBeANumber,
+  minValue,
+  maxValue,
+  exactLength,
+  noNegativeBalances,
+  composeValidators,
+  isValidEmail,
+  atLeastOneContact,
+};

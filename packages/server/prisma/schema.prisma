@@ -119,3 +119,22 @@ model Currency {
   name            String?
   CurrencyDrip    CurrencyDrip[]
 }
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model SupportTicket {
+  id                Int          @id @default(autoincrement())
+  email             String?
+  discordUsername   String?
+  telegramUsername  String?
+  xUsername         String?
+  message           String
+  status            TicketStatus @default(OPEN)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}

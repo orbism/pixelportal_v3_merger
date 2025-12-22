@@ -15,6 +15,7 @@ import PrivacyPolicyPage from "./pages/PrivacyPolicy.page";
 import RainbowPage from "./pages/Rainbow/Rainbow.page";
 import TermsPage from "./pages/Terms.page";
 import ViewerPage from "./pages/Viewer/Viewer.page";
+import HelpPage from "./pages/Help/Help.page";
 import { RouteMiddleware } from "./services/middleware";
 
 export enum NamedRoutes {
@@ -26,6 +27,7 @@ export enum NamedRoutes {
   MOBILE_HOME = "mobile",
   PIXELS = "pixels",
   PERKS = "perks",
+  HELP = "help",
   FOUR_O_FOUR = "fourofour",
   RAINBOW = "rainbow",
   PRIVACY = "privacy",
@@ -137,6 +139,19 @@ const routes: AppRouteInterface[] = [
     showOnMobile: true,
     showOnDesktop: true,
     displayOrder: 2,
+    icon: "person",
+  },
+  {
+    path: "/help",
+    name: NamedRoutes.HELP,
+    exact: true,
+    layout: AppLayout,
+    component: HelpPage,
+    desktopName: "Help",
+    mobileName: "HELP",
+    showOnMobile: true,
+    showOnDesktop: true,
+    displayOrder: 3,
     icon: "person",
   },
   {

@@ -43,6 +43,14 @@ export interface Configuration {
     port: number;
     password: string;
   };
+  smtp: {
+    host: string;
+    port: string;
+    user: string;
+    pass: string;
+    from: string;
+  };
+  supportEmailRecipients: string;
   nomicsKey: string;
   alchemyKey: string;
   chainAnalysisKey: string;
@@ -89,6 +97,14 @@ export default () => ({
     // port: parseInt(process.env.REDIS_PORT),
     // password: process.env.REDIS_PASSWORD,
   },
+  smtp: {
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT,
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+    from: process.env.SMTP_FROM,
+  },
+  supportEmailRecipients: process.env.SUPPORT_EMAIL_RECIPIENTS,
   nomicsKey: process.env.NOMICS_API_KEY,
   alchemyKey: process.env.ALCHEMY_KEY,
   chainAnalysisKey: process.env.CHAINANLYSIS_KEY,
