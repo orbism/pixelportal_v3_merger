@@ -16,18 +16,17 @@ const Modals: React.FC<{ store: ViewerStore }> = observer(({ store }) => {
   return (
     <>
       {AppStore.modals.isInfoModalOpen && (
-        <Box data-guide-target="info-modal">
-          <Modal
-            defaultPosition={AppStore.rwd.isMobile ? {} : { x: window.innerWidth / 5, y: 0 }}
-            title={"Own The Doge"}
-            onClose={() => AppStore.modals.toggleInfoModal()}
-            isOpen={AppStore.modals.isInfoModalOpen}
-          >
-            <Box display={"flex"} flexDirection={"column"} justifyContent={"space-between"}>
-              <IndexPane store={store} />
-            </Box>
-          </Modal>
-        </Box>
+        <Modal
+          defaultPosition={AppStore.rwd.isMobile ? {} : { x: window.innerWidth / 5, y: 0 }}
+          title={"Own The Doge"}
+          onClose={() => AppStore.modals.toggleInfoModal()}
+          isOpen={AppStore.modals.isInfoModalOpen}
+          name="info-modal"
+        >
+          <Box display={"flex"} flexDirection={"column"} justifyContent={"space-between"}>
+            <IndexPane store={store} />
+          </Box>
+        </Modal>
       )}
       {AppStore.modals.isSelectedPixelModalOpen && (
         <Modal

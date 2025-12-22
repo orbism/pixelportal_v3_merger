@@ -17,6 +17,9 @@ const GuideOverlay: React.FC = observer(() => {
   useEffect(() => {
     if (!currentStep) return;
 
+    let highlightedElement: HTMLElement | null = null;
+    let originalStyles: { position: string; zIndex: string } = { position: '', zIndex: '' };
+
     const updateTarget = () => {
       // Special handling for 'body' (welcome step)
       if (currentStep.targetElement === 'body') {
@@ -29,8 +32,17 @@ const GuideOverlay: React.FC = observer(() => {
         return;
       }
 
-      const element = document.querySelector(currentStep.targetElement);
+      const element = document.querySelector(currentStep.targetElement) as HTMLElement;
       if (element) {
+        // OPTION A: Z-Index Boost - Store reference and boost z-index
+        highlightedElement = element;
+        originalStyles.position = element.style.position || '';
+        originalStyles.zIndex = element.style.zIndex || '';
+        
+        // Boost z-index to appear above overlay
+        element.style.position = element.style.position || 'relative';
+        element.style.zIndex = '10001';
+
         const rect = element.getBoundingClientRect();
         setTargetRect(rect);
 
@@ -81,6 +93,11 @@ const GuideOverlay: React.FC = observer(() => {
     window.addEventListener('scroll', updateTarget);
 
     return () => {
+      // Cleanup: restore original styles
+      if (highlightedElement) {
+        highlightedElement.style.position = originalStyles.position;
+        highlightedElement.style.zIndex = originalStyles.zIndex;
+      }
       window.removeEventListener('resize', updateTarget);
       window.removeEventListener('scroll', updateTarget);
     };

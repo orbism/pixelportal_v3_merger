@@ -70,6 +70,7 @@ const Modal = ({
           zIndex={1}
           width={"100%"}
           maxWidth={chakraStyles.container.maxWidth as string}
+          data-guide-target={name}
         >
           <Box __css={chakraStyles.container}>
             <Flex>
