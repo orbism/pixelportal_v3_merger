@@ -57,6 +57,7 @@ export interface Configuration {
   blockCypherKey: string;
   phSecret: string;
   dripKey: string;
+  freeMoneyEnabled: boolean;
 }
 
 export default () => ({
@@ -110,5 +111,6 @@ export default () => ({
   chainAnalysisKey: process.env.CHAINANLYSIS_KEY,
   blockCypherKey: process.env.BLOCKCYPHER_KEY,
   phSecret: process.env.PH_SECRET,
-  dripKey: process.env.DRIP_KEY,
+  dripKey: process.env.DRIP_KEY || '',
+  freeMoneyEnabled: !!(process.env.DRIP_KEY && process.env.DRIP_KEY.trim()),
 });

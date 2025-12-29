@@ -62,10 +62,13 @@ export class OwnTheDogeContractService implements OnModuleInit {
     const logMessage = 'Provider connected';
     this.logger.log(logMessage);
 
-    this.dripDogSigner = new ethers.Wallet(
-      this.configService.get('dripKey'),
-      provider,
-    );
+    const dripKey = this.configService.get('dripKey');
+    if (dripKey && dripKey.trim()) {
+      this.dripDogSigner = new ethers.Wallet(dripKey, provider);
+      this.logger.log('FreeMoney feature enabled - drip wallet initialized');
+    } else {
+      this.logger.log('FreeMoney feature disabled - no DRIP_KEY provided');
+    }
     await this.connectToContracts(provider);
     this.initPixelListener();
     await this.pixelTransferService.syncRecentTransfers();
@@ -383,6 +386,9 @@ export class OwnTheDogeContractService implements OnModuleInit {
   }
 
   async sendDogToAddressFromDripAddress(to: string, amount: number) {
+    if (!this.dripDogSigner) {
+      throw new Error('FreeMoney feature is disabled - DRIP_KEY not configured');
+    }
     const amountAtoms = ethers.parseEther(amount.toString());
     console.log(`sending: ${amountAtoms} -- to: ${to}`);
     const contract = await this.getDogContract(this.dripDogSigner);
@@ -390,10 +396,16 @@ export class OwnTheDogeContractService implements OnModuleInit {
   }
 
   async getDogDripBalance() {
+    if (!this.dripDogSigner) {
+      throw new Error('FreeMoney feature is disabled - DRIP_KEY not configured');
+    }
     return this.dogContract.balanceOf(this.dripDogSigner.address);
   }
 
   getDogDripAddress() {
+    if (!this.dripDogSigner) {
+      throw new Error('FreeMoney feature is disabled - DRIP_KEY not configured');
+    }
     return this.dripDogSigner.address;
   }
 
