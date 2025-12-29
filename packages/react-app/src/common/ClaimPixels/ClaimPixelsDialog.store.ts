@@ -1,5 +1,4 @@
 import * as Sentry from "@sentry/react";
-import { BigNumber } from "ethers";
 import { computed, makeObservable, observable, runInAction } from "mobx";
 import { showDebugToast, showErrorToast } from "../../DSL/Toast/Toast";
 import { Constructor, EmptyClass } from "../../helpers/mixins";
@@ -42,6 +41,10 @@ class ClaimPixelsDialogStore extends Reactionable(
   constructor() {
     super();
     makeObservable(this);
+  }
+
+  get stepperItems() {
+    return [];
   }
 
   async init() {

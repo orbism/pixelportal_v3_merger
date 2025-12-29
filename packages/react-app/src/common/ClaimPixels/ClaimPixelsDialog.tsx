@@ -160,7 +160,7 @@ const Complete = observer(
           <Typography variant={TVariant.ComicSans16} textAlign="center" block>
             Successfully claimed {store.claimedPixels.length} pixel(s)
           </Typography>
-          <SharePixelsDialog action="claim" previewPixels={store.claimedPixels} />
+          <SharePixelsDialog action="claimed" previewPixels={store.claimedPixels} />
           <Flex justifyContent="center" mt={4}>
             {txHash && (
               <Link href={getEtherscanURL(txHash, "tx")} isExternal>

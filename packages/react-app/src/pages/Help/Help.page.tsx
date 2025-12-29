@@ -5,7 +5,7 @@ import { Form } from "react-final-form";
 import Button, { ButtonVariant } from "../../DSL/Button/Button";
 import TextInput from "../../DSL/Form/TextInput";
 import TextAreaInput from "../../DSL/Form/TextAreaInput";
-import { composeValidators, isValidEmail, required } from "../../DSL/Form/validation";
+import { isValidEmail, required } from "../../DSL/Form/validation";
 import Typography, { TVariant } from "../../DSL/Typography/Typography";
 import { lightOrDarkMode } from "../../DSL/Theme";
 import HelpStore, { SubmissionStatus } from "./Help.store";

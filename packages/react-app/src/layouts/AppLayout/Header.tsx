@@ -3,9 +3,6 @@ import { Box, Flex, useBreakpointValue, useColorMode } from "@chakra-ui/react";
 import { observer } from "mobx-react-lite";
 import { GiHamburgerMenu } from "react-icons/gi";
 import { useHistory, useLocation } from "react-router-dom";
-import { useAccount } from "wagmi";
-import { isProduction } from "../../environment/helpers";
-import { base, baseSepolia } from "viem/chains";
 import { NamedRoutes, route } from "../../App.routes";
 import { darkModeGradient, lightOrDarkMode } from "../../DSL/Theme";
 
@@ -16,8 +13,6 @@ import AppStore from "../../store/App.store";
 import NavLinks from "./NavLinks";
 import { ModalType } from "../../store/Modals.store";
 
-const targetChain = isProduction() ? base : baseSepolia;
-
 const Header = observer(() => {
   const history = useHistory();
   const location = useLocation();
@@ -25,10 +20,7 @@ const Header = observer(() => {
     base: () => AppStore.rwd.toggleMobileNav(),
     xl: () => history.push(route(NamedRoutes.VIEWER)),
   });
-  const { chain } = useAccount();
   const { colorMode } = useColorMode();
-  // const isConnected = AppStore.web3.isConnected;
-  const { isConnected, puppersOwned } = AppStore.web3;
 
   const handleMintClick = () => {
     if (location.pathname !== "/" && !location.pathname.includes("/px")) {

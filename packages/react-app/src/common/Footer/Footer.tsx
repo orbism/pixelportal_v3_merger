@@ -1,12 +1,9 @@
 import { Box, Flex, Grid, HStack, useColorMode } from "@chakra-ui/react";
 import { observer } from "mobx-react-lite";
 import { Type } from "../../DSL/Fonts/Fonts";
-import Icon from "../../DSL/Icon/Icon";
 import Link from "../../DSL/Link/Link";
 import { lightOrDarkMode } from "../../DSL/Theme";
 import Typography, { TVariant } from "../../DSL/Typography/Typography";
-import { formatWithThousandsSeparators } from "../../helpers/numberFormatter";
-import AppStore from "../../store/App.store";
 import { readLinks, socialLinks, dooLinks, tradeLinks } from "./Links";
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';

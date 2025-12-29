@@ -58,7 +58,7 @@ const useWeb3WagmiSync = () => {
     if (AppStore.web3.signer && !chain) {
       AppStore.web3.disconnect();
     }
-  }, [targetChain, account, chain]);
+  }, [targetChain, account, chain, transport]);
 };
 
 AppStore.init();
