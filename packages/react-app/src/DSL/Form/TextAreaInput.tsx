@@ -50,16 +50,18 @@ const TextAreaInput = React.forwardRef(
             }
             inputOnChange(e.target.value);
           }}
-          _placeholder={{ color: lightOrDarkMode(colorMode, "yellow.100", "gray.100") }}
+          _placeholder={{ color: lightOrDarkMode(colorMode, "gray.500", "gray.400") }}
           borderWidth="1px"
           borderStyle="solid"
           borderColor={lightOrDarkMode(colorMode, "black", "white")}
           color={lightOrDarkMode(colorMode, "black", "white")}
+          bg={lightOrDarkMode(colorMode, "#F1F2F3", "purple.600")}
           borderRadius="8px"
-          px={5}
+          px={6}
           py={3}
           _focus={{
             borderColor: lightOrDarkMode(colorMode, "black", "white"),
+            bg: lightOrDarkMode(colorMode, "#E0E1E2", "purple.500"),
             boxShadow: "none",
             _placeholder: {
               color: "transparent",

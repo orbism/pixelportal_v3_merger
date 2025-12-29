@@ -7,7 +7,7 @@ import Link from "../../DSL/Link/Link";
 import Marquee from "../../DSL/Marquee/Marquee";
 import { lightOrDarkMode } from "../../DSL/Theme";
 import Typography, { TVariant } from "../../DSL/Typography/Typography";
-import Footer from "../../common/Footer/Footer";
+import FooterDrawer from "../../common/Footer/FooterDrawer";
 import AppStore from "../../store/App.store";
 import Header from "./Header";
 import NavLinks from "./NavLinks";
@@ -19,7 +19,7 @@ interface AppLayoutProps {
 const AppLayout = observer(function AppLayout({ children }: AppLayoutProps) {
   return (
     <>
-      <Flex flexDir={"column"} id={"react-modal-main"} minH={"100vh"}>
+      <Flex flexDir={"column"} id={"react-modal-main"} minH={"100vh"} pb={"45px"}>
         {/* create space for our header rendered index.tsx */}
         <Box height={"40px"} />
         <Flex justifyContent={"center"} flexGrow={1} zIndex={1}>
@@ -29,11 +29,7 @@ const AppLayout = observer(function AppLayout({ children }: AppLayoutProps) {
           </Flex>
         </Flex>
       </Flex>
-      <Flex position={"relative"} zIndex={0} justifyContent={"center"}>
-        <Box display={{ base: "none", md: "block" }} w={"full"} maxW={"8xl"} px={4} mb={6}>
-          <Footer />
-        </Box>
-      </Flex>
+      <FooterDrawer />
       <MobileNav />
     </>
   );

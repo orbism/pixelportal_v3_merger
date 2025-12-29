@@ -55,7 +55,7 @@ const SelectPixels = observer(({ store }: { store: ClaimPixelsDialogStore }) => 
           No Pixels to Claim
         </Typography>
         <Typography variant={TVariant.ComicSans16} block>
-          You don't have any reserved pixels available to claim at this time.
+          You do not have any pixels from Pixel Portal v1 or v2 that you have burned.
         </Typography>
       </Box>
     );
@@ -68,7 +68,8 @@ const SelectPixels = observer(({ store }: { store: ClaimPixelsDialogStore }) => 
           Claim Your Pixels
         </Typography>
         <Typography variant={TVariant.ComicSans14} block textAlign="center" mt={2}>
-          Select pixels to claim from V1/V2 migration
+          You have successfully burned your Pixels on v1 or v2 of the Portal. <br/>
+          You can now claim those very pixels here in the new and improved v3!
         </Typography>
       </Box>
 

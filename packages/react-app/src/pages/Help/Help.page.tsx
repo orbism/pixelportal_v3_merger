@@ -1,6 +1,6 @@
 import { Box, Flex, useColorMode, VStack } from "@chakra-ui/react";
 import { observer } from "mobx-react-lite";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import { Form } from "react-final-form";
 import Button, { ButtonVariant } from "../../DSL/Button/Button";
 import TextInput from "../../DSL/Form/TextInput";
@@ -9,6 +9,7 @@ import { composeValidators, isValidEmail, required } from "../../DSL/Form/valida
 import Typography, { TVariant } from "../../DSL/Typography/Typography";
 import { lightOrDarkMode } from "../../DSL/Theme";
 import HelpStore, { SubmissionStatus } from "./Help.store";
+import SubmissionModal from "./SubmissionModal";
 import axios from "axios";
 import env from "../../environment";
 
@@ -45,6 +46,26 @@ const HelpPage = observer(() => {
   const store = useMemo(() => new HelpStore(), []);
   const { colorMode } = useColorMode();
   const [formKey, setFormKey] = useState(0);
+  const [showModal, setShowModal] = useState(false);
+  const pageTopRef = useRef<HTMLDivElement>(null);
+
+  const handleModalClose = () => {
+    setShowModal(false);
+    // Scroll to top of form
+    setTimeout(() => {
+      pageTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+    
+    // If submission was successful, mark that they need to confirm before submitting again
+    if (store.submissionStatus === SubmissionStatus.SUCCESS) {
+      store.setCanSubmitAnother(false);
+    }
+  };
+
+  const handleConfirmResubmit = () => {
+    store.setCanSubmitAnother(true);
+    store.reset();
+  };
 
   const onSubmit = async (values: HelpFormValues) => {
     console.log("=== FORM SUBMIT CALLED ===");
@@ -70,6 +91,9 @@ const HelpPage = observer(() => {
         console.log("✓ Success! Ticket ID:", response.data.ticketId);
         store.setTicketId(response.data.ticketId);
         store.setSubmissionStatus(SubmissionStatus.SUCCESS);
+        store.incrementSubmissionCount();
+        // Show modal
+        setShowModal(true);
         // Reset form by changing key
         setFormKey(prev => prev + 1);
       } else {
@@ -83,11 +107,21 @@ const HelpPage = observer(() => {
         error.response?.data?.message || error.message || "Failed to submit support ticket. Please try again.";
       store.setErrorMessage(errorMsg);
       store.setSubmissionStatus(SubmissionStatus.ERROR);
+      // Show modal for error as well
+      setShowModal(true);
     }
   };
 
   return (
-    <Box w={"full"} mt={6} p={{ base: 8, md: 0 }}>
+    <Box w={"full"} mt={6} p={{ base: 8, md: 0 }} ref={pageTopRef}>
+      <SubmissionModal
+        isOpen={showModal}
+        onClose={handleModalClose}
+        isSuccess={store.submissionStatus === SubmissionStatus.SUCCESS}
+        ticketId={store.ticketId}
+        errorMessage={store.errorMessage}
+      />
+      
       <Typography mb={4} block textAlign={"center"} variant={TVariant.PresStart24}>
         Help & Support
       </Typography>
@@ -100,109 +134,110 @@ const HelpPage = observer(() => {
             </Typography>
           </Box>
 
-          {store.submissionStatus === SubmissionStatus.SUCCESS && (
+          {store.hasReachedLimit && (
             <Box
               mb={6}
               p={6}
               borderWidth={1}
-              borderColor={lightOrDarkMode(colorMode, "green.500", "green.300")}
-              bg={lightOrDarkMode(colorMode, "green.50", "green.900")}
+              borderColor={lightOrDarkMode(colorMode, "orange.500", "orange.300")}
+              bg={lightOrDarkMode(colorMode, "orange.50", "orange.900")}
               borderRadius="8px"
+              textAlign="center"
             >
-              <Typography variant={TVariant.PresStart16} color={lightOrDarkMode(colorMode, "green.700", "green.200")}>
-                ✓ Ticket Submitted!
+              <Typography variant={TVariant.PresStart14} color={lightOrDarkMode(colorMode, "orange.700", "orange.200")} mb={2}>
+                Submission Limit Reached
               </Typography>
-              <Typography
-                mt={2}
-                variant={TVariant.ComicSans14}
-                color={lightOrDarkMode(colorMode, "green.600", "green.300")}
-              >
-                Your support ticket #{store.ticketId} has been submitted successfully. We'll get back to you soon!
+              <Typography variant={TVariant.ComicSans14} color={lightOrDarkMode(colorMode, "orange.600", "orange.300")}>
+                You've already submitted 3 support tickets in this session. Please wait for our team to respond to you.
               </Typography>
             </Box>
           )}
 
-          {store.submissionStatus === SubmissionStatus.ERROR && (
+          {store.hasSubmittedBefore && !store.canSubmitAnother && !store.hasReachedLimit && (
             <Box
               mb={6}
               p={6}
               borderWidth={1}
-              borderColor={lightOrDarkMode(colorMode, "red.500", "red.300")}
-              bg={lightOrDarkMode(colorMode, "red.50", "red.900")}
+              borderColor={lightOrDarkMode(colorMode, "blue.500", "blue.300")}
+              bg={lightOrDarkMode(colorMode, "blue.50", "blue.900")}
               borderRadius="8px"
             >
-              <Typography variant={TVariant.PresStart16} color={lightOrDarkMode(colorMode, "red.700", "red.200")}>
-                ✗ Submission Failed
+              <Typography variant={TVariant.ComicSans14} color={lightOrDarkMode(colorMode, "blue.700", "blue.200")} mb={3}>
+                <strong>You've already submitted a ticket.</strong>
               </Typography>
-              <Typography mt={2} variant={TVariant.ComicSans14} color={lightOrDarkMode(colorMode, "red.600", "red.300")}>
-                {store.errorMessage}
-              </Typography>
+              <Flex justifyContent="center">
+                <Button variant={ButtonVariant.Primary} onClick={handleConfirmResubmit}>
+                  Submit Another Ticket
+                </Button>
+              </Flex>
             </Box>
           )}
 
-          <Form
-            key={formKey}
-            onSubmit={onSubmit}
-            validate={validateForm}
-            render={({ handleSubmit, submitting, pristine, hasValidationErrors, errors }) => {
-              console.log("Form render - submitting:", submitting, "hasValidationErrors:", hasValidationErrors, "errors:", errors);
-              return (
-              <form onSubmit={handleSubmit}>
-                <VStack spacing={6} align={"stretch"}>
-                  <Box>
-                    <Typography variant={TVariant.PresStart14} mb={3}>
-                      Contact Information (at least one required):
-                    </Typography>
-                    <VStack spacing={4} align={"stretch"}>
-                      <TextInput
-                        name="email"
-                        placeholder="your@email.com"
-                        label="Email"
-                        validate={isValidEmail}
-                      />
-                      <TextInput
-                        name="discordUsername"
-                        placeholder="YourDiscordName#1234"
-                        label="Discord Username"
-                      />
-                      <TextInput
-                        name="telegramUsername"
-                        placeholder="@yourtelegram"
-                        label="Telegram Username"
-                      />
-                      <TextInput
-                        name="xUsername"
-                        placeholder="@yourhandle"
-                        label="X (Twitter) Username"
-                      />
-                    </VStack>
-                  </Box>
+          <Box opacity={!store.canSubmit ? 0.5 : 1} pointerEvents={!store.canSubmit ? "none" : "auto"}>
+            <Form
+              key={formKey}
+              onSubmit={onSubmit}
+              validate={validateForm}
+              render={({ handleSubmit, submitting, pristine, hasValidationErrors, errors }) => {
+                console.log("Form render - submitting:", submitting, "hasValidationErrors:", hasValidationErrors, "errors:", errors);
+                return (
+                <form onSubmit={handleSubmit}>
+                  <VStack spacing={6} align={"stretch"}>
+                    <Box>
+                      <Typography variant={TVariant.PresStart14} mb={3}>
+                        Contact Information (at least one required):
+                      </Typography>
+                      <VStack spacing={4} align={"stretch"}>
+                        <TextInput
+                          name="email"
+                          placeholder="your@email.com"
+                          label="Email"
+                          validate={isValidEmail}
+                        />
+                        <TextInput
+                          name="discordUsername"
+                          placeholder="YourDiscordName#1234"
+                          label="Discord Username"
+                        />
+                        <TextInput
+                          name="telegramUsername"
+                          placeholder="@yourtelegram"
+                          label="Telegram Username"
+                        />
+                        <TextInput
+                          name="xUsername"
+                          placeholder="@yourhandle"
+                          label="X (Twitter) Username"
+                        />
+                      </VStack>
+                    </Box>
 
-                  <Box>
-                    <TextAreaInput
-                      name="message"
-                      placeholder="Describe your issue or question in detail..."
-                      label="Message"
-                      validate={required("Please enter a message")}
-                      rows={8}
-                    />
-                  </Box>
+                    <Box>
+                      <TextAreaInput
+                        name="message"
+                        placeholder="Describe your issue or question in detail..."
+                        label="Message"
+                        validate={required("Please enter a message")}
+                        rows={8}
+                      />
+                    </Box>
 
-                  <Flex justifyContent={"center"} mt={4}>
-                    <Button
-                      submit
-                      variant={ButtonVariant.Primary}
-                      size="lg"
-                      isDisabled={submitting || store.submissionStatus === SubmissionStatus.SUBMITTING}
-                    >
-                      {store.submissionStatus === SubmissionStatus.SUBMITTING ? "Submitting..." : "Submit Ticket"}
-                    </Button>
-                  </Flex>
-                </VStack>
-              </form>
-            );
-            }}
-          />
+                    <Flex justifyContent={"center"} mt={4}>
+                      <Button
+                        submit
+                        variant={ButtonVariant.Primary}
+                        size="lg"
+                        isDisabled={submitting || store.submissionStatus === SubmissionStatus.SUBMITTING || !store.canSubmit}
+                      >
+                        {store.submissionStatus === SubmissionStatus.SUBMITTING ? "Submitting..." : "Submit Ticket"}
+                      </Button>
+                    </Flex>
+                  </VStack>
+                </form>
+              );
+              }}
+            />
+          </Box>
         </Box>
       </Flex>
     </Box>
