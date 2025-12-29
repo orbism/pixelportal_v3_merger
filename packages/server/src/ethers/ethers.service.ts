@@ -135,9 +135,7 @@ export class EthersService implements OnModuleInit {
   }
 
   async getEnsName(address: string) {
-    const ens = await this.ens.getEnsName(address);
-    if (ens) return ens;
-
+    // Base-only: Skip ENS (L1), only resolve Basenames (L2)
     const basename = await this.basenames.getBasename(address);
     return basename;
   }
