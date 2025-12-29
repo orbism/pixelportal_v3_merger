@@ -8,10 +8,10 @@ The Doge Pixel Portal allows users to own, trade, and interact with individual p
 
 ### Core Concept
 
-- **1,000,000 pixels** total (1000x1000 grid)
+- **307,200 pixels** total (640x480 grid)
 - Each pixel = individual ERC721 NFT token
-- Minting requires locking DOG20 tokens
-- Burning pixels unlocks DOG20 tokens
+- Minting requires locking $DOG
+- Burning pixels unlocks $DOG
 - Reservation/claim system for legacy holders
 - Built on Base L2 for low transaction costs
 
