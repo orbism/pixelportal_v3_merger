@@ -30,7 +30,7 @@ The Doge Pixel Portal allows users to own, trade, and interact with individual p
          │ WebSocket
 ┌────────▼────────┐
 │   Base L2       │  Smart contracts
-│   Blockchain    │  PX (ERC721) + DOG20 (ERC20)
+│   Blockchain    │  PX (ERC721) + $DOG (ERC20)
 └─────────────────┘
 ```
 

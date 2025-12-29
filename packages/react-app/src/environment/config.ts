@@ -5,7 +5,7 @@
  * This file reads from process.env and provides a consistent config object.
  */
 
-import deployedContracts from "../contracts/hardhat_contracts.json";
+import deployedContracts from "../contracts/abi.json";
 
 // Read chain configuration from environment
 const getChainId = (): number => {
