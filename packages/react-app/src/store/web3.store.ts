@@ -4,7 +4,7 @@ import { BigNumber, Contract, ethers } from "ethers";
 import { computed, makeObservable, observable, action, reaction, runInAction, override } from "mobx";
 import { DOG20, PX } from "../../../hardhat/types";
 import { showErrorToast } from "../DSL/Toast/Toast";
-import deployedContracts from "../contracts/hardhat_contracts.json";
+import deployedContracts from "../contracts/abi.json";
 import env from "../environment";
 import { ObjectKeys } from "../helpers/objects";
 import { abbreviate } from "../helpers/strings";

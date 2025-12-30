@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const srcFile = path.join(__dirname, "../../hardhat/hardhat_contracts.json")
-const dstFile = path.join(__dirname, "../src/contracts/hardhat_contracts.json")
+const dstFile = path.join(__dirname, "../src/contracts/abi.json")
 const srcFileExists = fs.existsSync(srcFile)
 const dstFileExists = fs.existsSync(dstFile)
 
@@ -24,7 +24,7 @@ if (srcFileExists) {
         throw err
       }
     });
-    console.log("✅ src/contracts/hardhat_contracts.json created.");
+    console.log("✅ src/contracts/abi.json created.");
   } catch (error) {
     console.log("error hit");
     throw error

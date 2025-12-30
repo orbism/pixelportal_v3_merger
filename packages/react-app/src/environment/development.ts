@@ -1,4 +1,4 @@
-import deployedContracts from "../contracts/hardhat_contracts.json";
+import deployedContracts from "../contracts/abi.json";
 
 // Use local Anvil for development
 const targetChainId = 1337;
