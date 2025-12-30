@@ -251,18 +251,6 @@ export class OwnTheDogeContractService implements OnModuleInit {
     return this.getPixelTransferLogs(from);
   }
 
-  async getSyncCursor(): Promise<number | null> {
-    try {
-      const state = await this.prisma.syncState.findUnique({
-        where: { key: 'pixel_transfers_sync' },
-      });
-      return state?.lastSyncedBlock || null;
-    } catch (error) {
-      this.logger.warn(`Failed to get sync cursor: ${error.message}`);
-      return null;
-    }
-  }
-
   async getPixelTransferLogs(fromBlock: number, _toBlock?: number) {
     // Get logs from chain in chunks with immediate DB saves and error handling
     const toBlock = _toBlock
@@ -296,7 +284,7 @@ export class OwnTheDogeContractService implements OnModuleInit {
         
         // Save chunk immediately
         if (_logs.length > 0) {
-          await this.pixelTransferService.upsertTransfersFromLogs(_logs);
+          await this.pixelTransferService.upsertTransfersFromLogs(_logs as ethers.EventLog[]);
           this.logger.log(`Saved ${_logs.length} transfers to DB`);
         }
         
@@ -335,7 +323,7 @@ export class OwnTheDogeContractService implements OnModuleInit {
     }
   }
 
-  private async getSyncCursor(): Promise<number | null> {
+  async getSyncCursor(): Promise<number | null> {
     try {
       const state = await this.prisma.syncState.findUnique({
         where: { key: 'pixel_transfers_sync' },
