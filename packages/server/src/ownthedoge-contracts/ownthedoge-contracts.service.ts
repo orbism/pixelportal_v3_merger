@@ -18,6 +18,7 @@ import { CurrencyService } from '../currency/currency.service';
 import { EthersService } from '../ethers/ethers.service';
 import { Events, PixelTransferEventPayload } from '../events';
 import { PixelTransferService } from '../pixel-transfer/pixel-transfer.service';
+import { PrismaService } from '../prisma.service';
 import { stringify } from '../utils';
 
 @Injectable()
@@ -41,6 +42,7 @@ export class OwnTheDogeContractService implements OnModuleInit {
     private eventEmitter: EventEmitter2,
     private http: HttpService,
     private currency: CurrencyService,
+    private prisma: PrismaService,
   ) {}
 
   async onModuleInit() {
@@ -237,21 +239,40 @@ export class OwnTheDogeContractService implements OnModuleInit {
   }
 
   async getAllPixelTransferLogs() {
-    const from = this.configService.get('pixelContractDeploymentBlockNumber');
+    // Check if we have a sync cursor from a previous incomplete sync
+    const syncCursor = await this.getSyncCursor();
+    const deploymentBlock = this.configService.get('pixelContractDeploymentBlockNumber');
+    const from = syncCursor ? syncCursor + 1 : deploymentBlock;
+    
+    if (syncCursor) {
+      this.logger.log(`Resuming sync from saved cursor: ${syncCursor}`);
+    }
+    
     return this.getPixelTransferLogs(from);
   }
 
+  async getSyncCursor(): Promise<number | null> {
+    try {
+      const state = await this.prisma.syncState.findUnique({
+        where: { key: 'pixel_transfers_sync' },
+      });
+      return state?.lastSyncedBlock || null;
+    } catch (error) {
+      this.logger.warn(`Failed to get sync cursor: ${error.message}`);
+      return null;
+    }
+  }
+
   async getPixelTransferLogs(fromBlock: number, _toBlock?: number) {
-    // get logs from the chain chunked by 5k blocks
-    // infura will only return 10k logs per request
+    // Get logs from chain in chunks with immediate DB saves and error handling
     const toBlock = _toBlock
       ? _toBlock
       : await this.ethersService.provider.getBlockNumber();
     this.logger.log(
       `Getting pixel transfers from block: ${fromBlock} to block: ${toBlock}`,
     );
-    const logs = [];
-    const step = 500;
+    const step = 1000;
+    const delayMs = 3000;
     const filter = this.pxContract.filters.Transfer(null, null);
 
     this.logger.log(`pxContract Address: ${this.pxContract.target}`);
@@ -261,13 +282,69 @@ export class OwnTheDogeContractService implements OnModuleInit {
         .then((net) => net.chainId)}`,
     );
 
+    let totalLogs = 0;
+    let currentBlock = fromBlock;
+
     for (let i = fromBlock; i <= toBlock; i += step + 1) {
-      const _logs = await this.pxContract.queryFilter(filter, i, i + step);
-      this.logger.log(`Got pixel transfer logs of length: ${_logs.length}`);
-      logs.push(..._logs);
+      const chunkStart = i;
+      const chunkEnd = Math.min(i + step, toBlock);
+      
+      try {
+        this.logger.log(`Fetching logs for blocks ${chunkStart} to ${chunkEnd}...`);
+        const _logs = await this.pxContract.queryFilter(filter, chunkStart, chunkEnd);
+        this.logger.log(`Got ${_logs.length} logs for this chunk`);
+        
+        // Save chunk immediately
+        if (_logs.length > 0) {
+          await this.pixelTransferService.upsertTransfersFromLogs(_logs);
+          this.logger.log(`Saved ${_logs.length} transfers to DB`);
+        }
+        
+        totalLogs += _logs.length;
+        currentBlock = chunkEnd;
+        
+        // Update sync cursor
+        await this.updateSyncCursor(chunkEnd);
+        
+        // Throttle to avoid rate limits
+        if (i + step + 1 <= toBlock) {
+          this.logger.log(`Waiting ${delayMs}ms before next chunk...`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      } catch (error) {
+        this.logger.error(`Failed to fetch/save chunk ${chunkStart}-${chunkEnd}: ${error.message}`);
+        this.logger.warn(`Continuing to next chunk...`);
+        // Continue to next chunk instead of crashing
+        continue;
+      }
     }
-    this.logger.log(`Got pixel transfer logs of length: ${logs.length}`);
-    return logs;
+    
+    this.logger.log(`Sync complete. Total logs processed: ${totalLogs}`);
+    return []; // Return empty since we're saving as we go
+  }
+
+  private async updateSyncCursor(blockNumber: number) {
+    try {
+      await this.prisma.syncState.upsert({
+        where: { key: 'pixel_transfers_sync' },
+        create: { key: 'pixel_transfers_sync', lastSyncedBlock: blockNumber },
+        update: { lastSyncedBlock: blockNumber },
+      });
+    } catch (error) {
+      this.logger.warn(`Failed to update sync cursor: ${error.message}`);
+    }
+  }
+
+  private async getSyncCursor(): Promise<number | null> {
+    try {
+      const state = await this.prisma.syncState.findUnique({
+        where: { key: 'pixel_transfers_sync' },
+      });
+      return state?.lastSyncedBlock || null;
+    } catch (error) {
+      this.logger.warn(`Failed to get sync cursor: ${error.message}`);
+      return null;
+    }
   }
 
   getDogLocked() {
