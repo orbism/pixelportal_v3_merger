@@ -251,7 +251,7 @@ export class OwnTheDogeContractService implements OnModuleInit {
       `Getting pixel transfers from block: ${fromBlock} to block: ${toBlock}`,
     );
     const logs = [];
-    const step = 5000;
+    const step = 2500;
     const filter = this.pxContract.filters.Transfer(null, null);
 
     this.logger.log(`pxContract Address: ${this.pxContract.target}`);
