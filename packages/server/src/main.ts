@@ -18,24 +18,17 @@ async function bootstrap() {
   // TODO: integrate multer
   app.use(bodyParser.json({ limit: '10mb' }));
 
-  // app.enableCors({
-  //   "origin": (origin, callback) => {
-  //     if (!origin || /\.ownthedoge\.com$/.test(origin) || /\.vercel\.app$/.test(origin)) {
-  //       callback(null, true);
-  //     } else {
-  //       callback(new Error('Not allowed by CORS'));
-  //     }
-  //   },
-  //   "methods": 'GET,HEAD,PUT,PATCH,POST,DELETE',
-  //   "preflightContinue": false,
-  //   "allowedHeaders": 'Content-Type, Accept',
-  //   "optionsSuccessStatus": 204
-  // });
-  
   app.enableCors({
-    "origin": "*",
-    "methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
+    "origin": (origin, callback) => {
+      if (!origin || /\.ownthedoge\.com$/.test(origin) || /\.vercel\.app$/.test(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    "methods": 'GET,HEAD,PUT,PATCH,POST,DELETE',
     "preflightContinue": false,
+    "allowedHeaders": 'Content-Type, Accept',
     "optionsSuccessStatus": 204
   });
   app.useGlobalPipes(

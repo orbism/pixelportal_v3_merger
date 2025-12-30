@@ -1,11 +1,11 @@
 {
-  "1337": {
-    "anvil-local": {
-      "name": "anvil-local",
-      "chainId": "1337",
+  "84532": {
+    "base-sepolia": {
+      "name": "base-sepolia",
+      "chainId": "84532",
       "contracts": {
         "PX": {
-          "address": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+          "address": "0xDa78429A37B4048133383188d747c0fe534696aa",
           "abi": [
             {
               "type": "constructor",
@@ -1663,7 +1663,7 @@
           ]
         },
         "DOG20": {
-          "address": "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853",
+          "address": "0xFc07128A1A1b8f575dd3531a1f056F956152eC42",
           "abi": [
             {
               "type": "constructor",

@@ -1,7 +1,7 @@
 const fs = require('fs');
 
-const srcFile = '../hardhat/hardhat_contracts.json';
-const dstFile = './src/contracts/hardhat_contracts.json';
+const srcFile = '../hardhat/abi.json';
+const dstFile = './src/contracts/abi.json';
 const srcFileExists = fs.existsSync(srcFile);
 const dstFileExists = fs.existsSync(dstFile);
 
@@ -18,7 +18,7 @@ if (srcFileExists) {
         throw err;
       }
     });
-    console.log('✅ src/contracts/hardhat_contracts.json created');
+    console.log('✅ src/contracts/abi.json created');
   } catch (error) {
     console.log(error);
   }
