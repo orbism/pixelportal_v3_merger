@@ -60,6 +60,16 @@ export class OwnTheDogeContractService implements OnModuleInit {
     return !!this.pxContract && !!this.dogContract;
   }
 
+  private async waitForContracts(timeoutMs: number): Promise<void> {
+    const startTime = Date.now();
+    while (!this.isConnectedToContracts) {
+      if (Date.now() - startTime > timeoutMs) {
+        throw new Error('Timeout waiting for contract initialization');
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+
   private async onProviderConnected(provider: ethers.WebSocketProvider) {
     const logMessage = 'Provider connected';
     this.logger.log(logMessage);
@@ -401,6 +411,13 @@ export class OwnTheDogeContractService implements OnModuleInit {
 
   async getDimensions() {
     try {
+      // Wait for contract initialization (max 10s)
+      await this.waitForContracts(10000);
+      
+      if (!this.pxContract) {
+        throw new Error('PX contract not initialized');
+      }
+
       const width = await this.pxContract.SHIBA_WIDTH();
       const height = await this.pxContract.SHIBA_HEIGHT();
 
@@ -426,7 +443,14 @@ export class OwnTheDogeContractService implements OnModuleInit {
     return this.pxContract.ownerOf(tokenId);
   }
 
-  getPixelBalanceByAddress(address: string) {
+  async getPixelBalanceByAddress(address: string) {
+    // Wait for contract initialization (max 10s)
+    await this.waitForContracts(10000);
+    
+    if (!this.pxContract) {
+      throw new Error('PX contract not initialized');
+    }
+    
     return this.pxContract.balanceOf(address);
   }
 
