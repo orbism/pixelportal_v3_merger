@@ -200,16 +200,24 @@ export class PixelTransferService {
       }
     }
 
-    // Get ENS names with timeout protection
+    // Get ENS/Basename names with timeout protection
     for (const address in balances) {
       try {
-        const ens = await Promise.race([
-          this.ethers.getCachedEnsName(address),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('ENS timeout')), 2000))
-        ]);
-        balances[address].ens = ens;
+        // Try cache first, fallback to fresh lookup (includes Basenames)
+        let ens = await this.ethers.getCachedEnsName(address);
+        if (!ens) {
+          ens = await Promise.race([
+            this.ethers.getEnsName(address),
+            new Promise<string>((_, reject) => setTimeout(() => reject(new Error('ENS timeout')), 3000))
+          ]);
+          // Cache the result if found
+          if (ens) {
+            await this.ethers.refreshEnsCache(address);
+          }
+        }
+        balances[address].ens = ens || null;
       } catch (error) {
-        this.logger.warn(`Failed to get ENS for ${address}:`, error.message);
+        this.logger.warn(`Failed to get ENS/Basename for ${address}:`, error.message);
         balances[address].ens = null;
       }
     }

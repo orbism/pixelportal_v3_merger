@@ -44,15 +44,6 @@ const UserDropdown = observer(() => {
     }
   }, [AppStore.web3.address, AppStore.web3.signer]);
 
-  const queryClient = useQueryClient();
-  const { data: blockNumber } = useBlockNumber({ watch: true });
-
-  useEffect(() => {
-    if (blockNumber) {
-      queryClient.invalidateQueries();
-    }
-  }, [blockNumber, queryClient]);
-
   return (
     <Box>
       <Menu isOpen={isOpen} onOpen={() => setIsOpen(true)} onClose={() => setIsOpen(false)}>
