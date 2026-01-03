@@ -5,7 +5,7 @@
       "chainId": "84532",
       "contracts": {
         "PX": {
-          "address": "0xDa78429A37B4048133383188d747c0fe534696aa",
+          "address": "0x356C8f8Ed28B6A0386a948AaD7acA06799d6bf34",
           "abi": [
             {
               "type": "constructor",
