@@ -3,6 +3,7 @@ import { computed, makeObservable, observable, action, reaction, runInAction, ov
 import { ObjectKeys } from "../helpers/objects";
 import { PixelOwnerInfo } from "../pages/Leaderbork/Leaderbork.store";
 import { HttpL1 } from "../services";
+import env from "../environment";
 
 interface AddressToPuppers {
   [k: string]: {
@@ -24,7 +25,11 @@ class L1Store {
   }
 
   init() {
-    this.getPixelOwnershipMap();
+    // Only fetch L1 data on Ethereum mainnet (chainId 1)
+    // L1 API contains historical mainnet pixel data, not needed for testnet
+    if (env.chain.id === 1) {
+      this.getPixelOwnershipMap();
+    }
   }
 
   getPixelOwnershipMap() {

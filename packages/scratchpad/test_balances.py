@@ -2,7 +2,7 @@ import requests
 
 
 local = requests.get("http://localhost:3003/v1/config").json()
-remote = requests.get("https://staging.api.ownthedoge.com/v1/config").json()
+remote = requests.get("https://base-sepolia-v3.portalapi.ownthedoge.com/v1/config").json()
 
 print(local)
 print(remote)

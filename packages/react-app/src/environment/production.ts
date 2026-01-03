@@ -1,6 +1,6 @@
 const productionEnv = {
   api: {
-    baseURL: "https://base.api.ownthedoge.com",
+    baseURL: "https://base-v3.portalapi.ownthedoge.com",
     l1: "https://api.ownthedoge.com",
   },
   app: {
