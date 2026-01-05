@@ -1,5 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ethers } from 'ethers';
+import { Configuration } from '../config/configuration';
 import { CurrencyDripService } from '../currency-drip/currency-drip.service';
 import { CurrencyService } from '../currency/currency.service';
 import { formatAddress } from '../helpers/strings';
@@ -9,6 +11,7 @@ export class AlreadyClaimedError extends Error {}
 export class InvalidSignatureError extends Error {}
 export class NotEnoughBalanceError extends Error {}
 export class NotEnoughEthBalanceError extends Error {}
+export class FeatureDisabledError extends Error {}
 
 @Injectable()
 export class FreeMoneyService implements OnModuleInit {
@@ -20,13 +23,26 @@ export class FreeMoneyService implements OnModuleInit {
     private readonly currencyDrip: CurrencyDripService,
     private readonly otd: OwnTheDogeContractService,
     private readonly currency: CurrencyService,
+    private readonly configService: ConfigService<Configuration>,
   ) {}
 
   onModuleInit() {
-    this.logger.log(`💰🐕💰🐕 CREATE FREE $DOG MONEY SERVICE 💰🐕💰🐕`);
+    const isEnabled = this.configService.get('freeMoneyEnabled');
+    if (isEnabled) {
+      this.logger.log(`💰🐕💰🐕 CREATE FREE $DOG MONEY SERVICE 💰🐕💰🐕`);
+    } else {
+      this.logger.log(`FreeMoney service initialized but DISABLED (no DRIP_KEY)`);
+    }
+  }
+
+  private checkFeatureEnabled() {
+    if (!this.configService.get('freeMoneyEnabled')) {
+      throw new FeatureDisabledError('FreeMoney feature is disabled');
+    }
   }
 
   async validateDrip(address: string, signature: string) {
+    this.checkFeatureEnabled();
     const tx = await this.currencyDrip.findFirst({
       where: { to: formatAddress(address) },
     });
@@ -75,6 +91,7 @@ export class FreeMoneyService implements OnModuleInit {
   }
 
   async drip(address: string) {
+    this.checkFeatureEnabled();
     const { dog: contractAddress } = this.otd.getContractAddresses();
     const from = this.otd.getDogDripAddress();
 
@@ -110,15 +127,18 @@ export class FreeMoneyService implements OnModuleInit {
   }
 
   getTxs() {
+    this.checkFeatureEnabled();
     return this.currencyDrip.findMany();
   }
 
   async getFormattedBalance() {
+    this.checkFeatureEnabled();
     const balance = await this.otd.getDogDripBalance();
     return ethers.formatEther(balance.toString());
   }
 
   getAddressTxs(address: string) {
+    this.checkFeatureEnabled();
     return this.currencyDrip.findMany({
       where: { to: formatAddress(address) },
     });

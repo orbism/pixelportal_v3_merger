@@ -263,8 +263,10 @@ class LeaderborkStore extends Reactionable(EmptyClass) {
   }
 
   async getGlobalTransfers() {
-    const l1 = await AppStore.l1.getGlobalTransfers();
     const l2 = await AppStore.web3.getGlobalTransfers();
+    
+    // Only fetch L1 transfers on Ethereum mainnet
+    const l1 = AppStore.l1.isL1Enabled ? await AppStore.l1.getGlobalTransfers() : [];
 
     const transfers = orderBy([...l1, ...l2], "blockCreatedAt", "desc");
 
@@ -274,8 +276,10 @@ class LeaderborkStore extends Reactionable(EmptyClass) {
   async getSelectedUserTransfers() {
     if (!this.selectedAddress) return;
 
-    const l1 = await AppStore.l1.getUserTransfers(this.selectedAddress);
     const l2 = await AppStore.web3.getUserTransfers(this.selectedAddress);
+    
+    // Only fetch L1 transfers on Ethereum mainnet
+    const l1 = AppStore.l1.isL1Enabled ? await AppStore.l1.getUserTransfers(this.selectedAddress) : [];
 
     const transfers = orderBy([...l1, ...l2], "blockCreatedAt", "desc");
 
@@ -319,7 +323,7 @@ class LeaderborkStore extends Reactionable(EmptyClass) {
 
   @computed
   get selectedPixelChain() {
-    const l1 = AppStore.l1.addressToPuppers;
+    const l1 = AppStore.l1.addressToPuppers || {};
 
     return flatMap(values(l1), "tokenIds").includes(this.selectedPixelId) ? "ethereum" : "base";
   }
@@ -364,7 +368,7 @@ class LeaderborkStore extends Reactionable(EmptyClass) {
 
   @computed
   get sortedPixelOwners() {
-    const l1 = AppStore.l1.addressToPuppers;
+    const l1 = AppStore.l1.addressToPuppers || {};
     const l2 = AppStore.web3.addressToPuppers;
 
     const tds = uniq([...keys(l1), ...keys(l2)]).map((key, index, arr) => {

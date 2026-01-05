@@ -21,6 +21,7 @@ import { PostTransfersDto } from './dto/PostTransfers.dto';
 import { EthersService } from './ethers/ethers.service';
 import {
   AlreadyClaimedError,
+  FeatureDisabledError,
   FreeMoneyService,
   InvalidSignatureError,
   NotEnoughBalanceError,
@@ -270,7 +271,9 @@ export class AppController {
       await this.freeMoney.validateDrip(address, signature);
       return this.freeMoney.drip(address);
     } catch (e) {
-      if (e instanceof AlreadyClaimedError) {
+      if (e instanceof FeatureDisabledError) {
+        throw new BadRequestException('FreeMoney feature is currently disabled');
+      } else if (e instanceof AlreadyClaimedError) {
         throw new BadRequestException("🐕✋  You've already claimed   ✋🐕");
       } else if (e instanceof InvalidSignatureError) {
         throw new BadRequestException('Invalid signature');
@@ -288,18 +291,39 @@ export class AppController {
 
   @Get('freemoney/balance')
   async getFreeMoneyBalance() {
-    return this.freeMoney.getFormattedBalance();
+    try {
+      return this.freeMoney.getFormattedBalance();
+    } catch (e) {
+      if (e instanceof FeatureDisabledError) {
+        throw new BadRequestException('FreeMoney feature is currently disabled');
+      }
+      throw e;
+    }
   }
 
   @Get('freemoney/txs/:address')
   async getFreeMoneyBalanceByAddress(
     @Param() { address }: { address: string },
   ) {
-    return this.freeMoney.getAddressTxs(address);
+    try {
+      return this.freeMoney.getAddressTxs(address);
+    } catch (e) {
+      if (e instanceof FeatureDisabledError) {
+        throw new BadRequestException('FreeMoney feature is currently disabled');
+      }
+      throw e;
+    }
   }
 
   @Get('freemoney/txs')
   getFreeMoneyTxs() {
-    return this.freeMoney.getTxs();
+    try {
+      return this.freeMoney.getTxs();
+    } catch (e) {
+      if (e instanceof FeatureDisabledError) {
+        throw new BadRequestException('FreeMoney feature is currently disabled');
+      }
+      throw e;
+    }
   }
 }

@@ -76,7 +76,7 @@ const main = async () => {
   // const address = "D8HjKf37rF3Ho7tjwe17MPN8xQ2UbHSUhB"
   // const myAddress = "DFEmbNXw53xLWYwgmSP6w2SKhawKz3XZaU"
   const { data } = await axios.get(
-    "https://staging.api.ownthedoge.com/ph/donations"
+    "https://base-sepolia-v3.portalapi.ownthedoge.com/ph/donations"
   );
   console.log(data.length);
 };

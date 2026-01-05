@@ -12,12 +12,13 @@ import { TokenType } from '@prisma/client';
 import { Provider, Signer, WebSocketProvider, ethers } from 'ethers';
 import { Configuration } from '../config/configuration';
 import * as KobosuJson from '../constants/kobosu.json';
-import * as ABI from '../contracts/hardhat_contracts.json';
-import * as contractData from '../contracts/hardhat_contracts.json';
+import * as ABI from '../contracts/abi.json';
+import * as contractData from '../contracts/abi.json';
 import { CurrencyService } from '../currency/currency.service';
 import { EthersService } from '../ethers/ethers.service';
 import { Events, PixelTransferEventPayload } from '../events';
 import { PixelTransferService } from '../pixel-transfer/pixel-transfer.service';
+import { PrismaService } from '../prisma.service';
 import { stringify } from '../utils';
 
 @Injectable()
@@ -41,6 +42,7 @@ export class OwnTheDogeContractService implements OnModuleInit {
     private eventEmitter: EventEmitter2,
     private http: HttpService,
     private currency: CurrencyService,
+    private prisma: PrismaService,
   ) {}
 
   async onModuleInit() {
@@ -58,14 +60,27 @@ export class OwnTheDogeContractService implements OnModuleInit {
     return !!this.pxContract && !!this.dogContract;
   }
 
+  private async waitForContracts(timeoutMs: number): Promise<void> {
+    const startTime = Date.now();
+    while (!this.isConnectedToContracts) {
+      if (Date.now() - startTime > timeoutMs) {
+        throw new Error('Timeout waiting for contract initialization');
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+
   private async onProviderConnected(provider: ethers.WebSocketProvider) {
     const logMessage = 'Provider connected';
     this.logger.log(logMessage);
 
-    this.dripDogSigner = new ethers.Wallet(
-      this.configService.get('dripKey'),
-      provider,
-    );
+    const dripKey = this.configService.get('dripKey');
+    if (dripKey && dripKey.trim()) {
+      this.dripDogSigner = new ethers.Wallet(dripKey, provider);
+      this.logger.log('FreeMoney feature enabled - drip wallet initialized');
+    } else {
+      this.logger.log('FreeMoney feature disabled - no DRIP_KEY provided');
+    }
     await this.connectToContracts(provider);
     this.initPixelListener();
     await this.pixelTransferService.syncRecentTransfers();
@@ -234,21 +249,28 @@ export class OwnTheDogeContractService implements OnModuleInit {
   }
 
   async getAllPixelTransferLogs() {
-    const from = this.configService.get('pixelContractDeploymentBlockNumber');
+    // Check if we have a sync cursor from a previous incomplete sync
+    const syncCursor = await this.getSyncCursor();
+    const deploymentBlock = this.configService.get('pixelContractDeploymentBlockNumber');
+    const from = syncCursor ? syncCursor + 1 : deploymentBlock;
+    
+    if (syncCursor) {
+      this.logger.log(`Resuming sync from saved cursor: ${syncCursor}`);
+    }
+    
     return this.getPixelTransferLogs(from);
   }
 
   async getPixelTransferLogs(fromBlock: number, _toBlock?: number) {
-    // get logs from the chain chunked by 5k blocks
-    // infura will only return 10k logs per request
+    // Get logs from chain in chunks with immediate DB saves and error handling
     const toBlock = _toBlock
       ? _toBlock
       : await this.ethersService.provider.getBlockNumber();
     this.logger.log(
       `Getting pixel transfers from block: ${fromBlock} to block: ${toBlock}`,
     );
-    const logs = [];
-    const step = 5000;
+    const step = 1000;
+    const delayMs = 3000;
     const filter = this.pxContract.filters.Transfer(null, null);
 
     this.logger.log(`pxContract Address: ${this.pxContract.target}`);
@@ -258,13 +280,69 @@ export class OwnTheDogeContractService implements OnModuleInit {
         .then((net) => net.chainId)}`,
     );
 
+    let totalLogs = 0;
+    let currentBlock = fromBlock;
+
     for (let i = fromBlock; i <= toBlock; i += step + 1) {
-      const _logs = await this.pxContract.queryFilter(filter, i, i + step);
-      this.logger.log(`Got pixel transfer logs of length: ${_logs.length}`);
-      logs.push(..._logs);
+      const chunkStart = i;
+      const chunkEnd = Math.min(i + step, toBlock);
+      
+      try {
+        this.logger.log(`Fetching logs for blocks ${chunkStart} to ${chunkEnd}...`);
+        const _logs = await this.pxContract.queryFilter(filter, chunkStart, chunkEnd);
+        this.logger.log(`Got ${_logs.length} logs for this chunk`);
+        
+        // Save chunk immediately
+        if (_logs.length > 0) {
+          await this.pixelTransferService.upsertTransfersFromLogs(_logs as ethers.EventLog[]);
+          this.logger.log(`Saved ${_logs.length} transfers to DB`);
+        }
+        
+        totalLogs += _logs.length;
+        currentBlock = chunkEnd;
+        
+        // Update sync cursor
+        await this.updateSyncCursor(chunkEnd);
+        
+        // Throttle to avoid rate limits
+        if (i + step + 1 <= toBlock) {
+          this.logger.log(`Waiting ${delayMs}ms before next chunk...`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      } catch (error) {
+        this.logger.error(`Failed to fetch/save chunk ${chunkStart}-${chunkEnd}: ${error.message}`);
+        this.logger.warn(`Continuing to next chunk...`);
+        // Continue to next chunk instead of crashing
+        continue;
+      }
     }
-    this.logger.log(`Got pixel transfer logs of length: ${logs.length}`);
-    return logs;
+    
+    this.logger.log(`Sync complete. Total logs processed: ${totalLogs}`);
+    return []; // Return empty since we're saving as we go
+  }
+
+  private async updateSyncCursor(blockNumber: number) {
+    try {
+      await this.prisma.syncState.upsert({
+        where: { key: 'pixel_transfers_sync' },
+        create: { key: 'pixel_transfers_sync', lastSyncedBlock: blockNumber },
+        update: { lastSyncedBlock: blockNumber },
+      });
+    } catch (error) {
+      this.logger.warn(`Failed to update sync cursor: ${error.message}`);
+    }
+  }
+
+  async getSyncCursor(): Promise<number | null> {
+    try {
+      const state = await this.prisma.syncState.findUnique({
+        where: { key: 'pixel_transfers_sync' },
+      });
+      return state?.lastSyncedBlock || null;
+    } catch (error) {
+      this.logger.warn(`Failed to get sync cursor: ${error.message}`);
+      return null;
+    }
   }
 
   getDogLocked() {
@@ -333,6 +411,13 @@ export class OwnTheDogeContractService implements OnModuleInit {
 
   async getDimensions() {
     try {
+      // Wait for contract initialization (max 10s)
+      await this.waitForContracts(10000);
+      
+      if (!this.pxContract) {
+        throw new Error('PX contract not initialized');
+      }
+
       const width = await this.pxContract.SHIBA_WIDTH();
       const height = await this.pxContract.SHIBA_HEIGHT();
 
@@ -358,7 +443,14 @@ export class OwnTheDogeContractService implements OnModuleInit {
     return this.pxContract.ownerOf(tokenId);
   }
 
-  getPixelBalanceByAddress(address: string) {
+  async getPixelBalanceByAddress(address: string) {
+    // Wait for contract initialization (max 10s)
+    await this.waitForContracts(10000);
+    
+    if (!this.pxContract) {
+      throw new Error('PX contract not initialized');
+    }
+    
     return this.pxContract.balanceOf(address);
   }
 
@@ -383,6 +475,9 @@ export class OwnTheDogeContractService implements OnModuleInit {
   }
 
   async sendDogToAddressFromDripAddress(to: string, amount: number) {
+    if (!this.dripDogSigner) {
+      throw new Error('FreeMoney feature is disabled - DRIP_KEY not configured');
+    }
     const amountAtoms = ethers.parseEther(amount.toString());
     console.log(`sending: ${amountAtoms} -- to: ${to}`);
     const contract = await this.getDogContract(this.dripDogSigner);
@@ -390,10 +485,16 @@ export class OwnTheDogeContractService implements OnModuleInit {
   }
 
   async getDogDripBalance() {
+    if (!this.dripDogSigner) {
+      throw new Error('FreeMoney feature is disabled - DRIP_KEY not configured');
+    }
     return this.dogContract.balanceOf(this.dripDogSigner.address);
   }
 
   getDogDripAddress() {
+    if (!this.dripDogSigner) {
+      throw new Error('FreeMoney feature is disabled - DRIP_KEY not configured');
+    }
     return this.dripDogSigner.address;
   }
 

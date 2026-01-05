@@ -3,6 +3,7 @@ import { computed, makeObservable, observable, action, reaction, runInAction, ov
 import { ObjectKeys } from "../helpers/objects";
 import { PixelOwnerInfo } from "../pages/Leaderbork/Leaderbork.store";
 import { HttpL1 } from "../services";
+import env from "../environment";
 
 interface AddressToPuppers {
   [k: string]: {
@@ -14,17 +15,24 @@ interface AddressToPuppers {
 class L1Store {
   @observable
   addressToPuppers?: AddressToPuppers;
+  
+  @observable
+  isL1Enabled: boolean = false;
 
   constructor() {
     makeObservable(this);
 
-    this.addressToPuppers = {};
+    // Only initialize L1 data on Ethereum mainnet (chainId 1)
+    this.isL1Enabled = env.chain.id === 1;
+    this.addressToPuppers = this.isL1Enabled ? {} : undefined;
 
     this.init();
   }
 
   init() {
-    this.getPixelOwnershipMap();
+    if (this.isL1Enabled) {
+      this.getPixelOwnershipMap();
+    }
   }
 
   getPixelOwnershipMap() {

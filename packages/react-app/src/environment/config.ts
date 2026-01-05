@@ -5,7 +5,7 @@
  * This file reads from process.env and provides a consistent config object.
  */
 
-import deployedContracts from "../contracts/hardhat_contracts.json";
+import deployedContracts from "../contracts/abi.json";
 
 // Read chain configuration from environment
 const getChainId = (): number => {
@@ -98,9 +98,9 @@ const getServerUrl = (): string => {
   if (chainId === 1337 || chainId === 31337) {
     return 'http://localhost:3003';
   } else if (chainId === 8453) {
-    return 'https://base.api.ownthedoge.com';
+    return 'https://base-v3.portalapi.ownthedoge.com';
   } else if (chainId === 84532) {
-    return 'https://base-sepolia.api.ownthedoge.com';
+    return 'https://base-sepolia-v3.portalapi.ownthedoge.com';
   }
   
   return 'http://localhost:3003'; // fallback to local

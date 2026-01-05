@@ -1,4 +1,4 @@
-import deployedContracts from "../contracts/hardhat_contracts.json";
+import deployedContracts from "../contracts/abi.json";
 
 // Use local Anvil for development
 const targetChainId = 1337;
@@ -6,10 +6,10 @@ const targetNetworkName = "anvil-local";
 
 const developmentEnv = {
   api: {
-    baseURL: "https://base-sepolia.api.ownthedoge.com",
+    baseURL: "https://base-sepolia-v3.portalapi.ownthedoge.com",
     // baseURL: "https://otdpp-e3efe865e8b4.herokuapp.com/",
     proxyURL: "http://localhost:3003",
-    l1: "https://api.ownthedoge.com",
+    l1: "https://base-v3.portalapi.ownthedoge.com",
   },
   app: {
     availableTokens: {

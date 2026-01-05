@@ -24,23 +24,19 @@ export class PixelTransferService {
 
   async syncAll() {
     this.logger.log('Syncing all pixel transfer events');
-    return this.upsertTransfersFromLogs(
-      await this.pixels.getAllPixelTransferLogs(),
-    ).then((res) => {
-      this.logger.log('Done syncing pixel transfer events');
-    });
+    // getPixelTransferLogs now handles saving internally
+    await this.pixels.getAllPixelTransferLogs();
+    this.logger.log('Done syncing pixel transfer events');
   }
 
   async syncFromBlockNumber(block: number) {
     this.logger.log(`Syncing pixel transfers from block: ${block}`);
-    return this.upsertTransfersFromLogs(
-      await this.pixels.getPixelTransferLogs(block),
-    ).then((_) => {
-      this.logger.log(`Done syncing pixel transfers from block: ${block}`);
-    });
+    // getPixelTransferLogs now handles saving internally
+    await this.pixels.getPixelTransferLogs(block);
+    this.logger.log(`Done syncing pixel transfers from block: ${block}`);
   }
 
-  private async upsertTransfersFromLogs(events: EventLog[]) {
+  async upsertTransfersFromLogs(events: EventLog[]) {
     for (const event of events) {
       const { args, blockNumber } = event;
       const blockCreatedAt =
@@ -88,12 +84,21 @@ export class PixelTransferService {
   }
 
   async syncRecentTransfers() {
+    // Check sync cursor first, fallback to last transfer block
+    const syncCursor = await this.pixels.getSyncCursor();
+    if (syncCursor) {
+      this.logger.log(`Resuming sync from cursor: block ${syncCursor}`);
+      return this.pixels.getPixelTransferLogs(syncCursor + 1);
+    }
+    
     const mostRecentBlock =
       await this.pixelTransfers.getMostRecentTransferBlockNumber();
     if (!mostRecentBlock) {
-      return this.syncAll();
+      this.logger.log('No previous transfers found, starting full sync');
+      return this.pixels.getAllPixelTransferLogs();
     } else {
-      return this.syncFromBlockNumber(mostRecentBlock);
+      this.logger.log(`Syncing from last transfer block: ${mostRecentBlock}`);
+      return this.pixels.getPixelTransferLogs(mostRecentBlock);
     }
   }
 
@@ -195,16 +200,24 @@ export class PixelTransferService {
       }
     }
 
-    // Get ENS names with timeout protection
+    // Get ENS/Basename names with timeout protection
     for (const address in balances) {
       try {
-        const ens = await Promise.race([
-          this.ethers.getCachedEnsName(address),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('ENS timeout')), 2000))
-        ]);
-        balances[address].ens = ens;
+        // Try cache first, fallback to fresh lookup (includes Basenames)
+        let ens = await this.ethers.getCachedEnsName(address);
+        if (!ens) {
+          ens = await Promise.race([
+            this.ethers.getEnsName(address),
+            new Promise<string>((_, reject) => setTimeout(() => reject(new Error('ENS timeout')), 3000))
+          ]);
+          // Cache the result if found
+          if (ens) {
+            await this.ethers.refreshEnsCache(address);
+          }
+        }
+        balances[address].ens = ens || null;
       } catch (error) {
-        this.logger.warn(`Failed to get ENS for ${address}:`, error.message);
+        this.logger.warn(`Failed to get ENS/Basename for ${address}:`, error.message);
         balances[address].ens = null;
       }
     }

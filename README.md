@@ -8,10 +8,10 @@ The Doge Pixel Portal allows users to own, trade, and interact with individual p
 
 ### Core Concept
 
-- **1,000,000 pixels** total (1000x1000 grid)
+- **307,200 pixels** total (640x480 grid)
 - Each pixel = individual ERC721 NFT token
-- Minting requires locking DOG20 tokens
-- Burning pixels unlocks DOG20 tokens
+- Minting requires locking $DOG
+- Burning pixels unlocks $DOG
 - Reservation/claim system for legacy holders
 - Built on Base L2 for low transaction costs
 
@@ -30,7 +30,7 @@ The Doge Pixel Portal allows users to own, trade, and interact with individual p
          │ WebSocket
 ┌────────▼────────┐
 │   Base L2       │  Smart contracts
-│   Blockchain    │  PX (ERC721) + DOG20 (ERC20)
+│   Blockchain    │  PX (ERC721) + $DOG (ERC20)
 └─────────────────┘
 ```
 
@@ -188,6 +188,9 @@ SMTP_PORT=
 SMTP_USER=
 SMTP_PASS=
 SUPPORT_EMAIL_RECIPIENTS=your@email.com
+
+# Optional: FreeMoney/Faucet feature (leave blank to disable)
+DRIP_KEY=
 ```
 
 ### Key Endpoints
@@ -544,9 +547,35 @@ heroku logs --tail
 - `DISCORD_SECRET`: Discord webhook for notifications
 - `AWS_*`: S3 configuration for image storage
 - `SENTRY_DNS`: Error tracking
+- `DRIP_KEY`: Private key for freemoney/faucet feature (leave blank to disable)
 
 **Frontend:**
 - `REACT_APP_SENTRY_DSN`: Error tracking
+
+### FreeMoney Feature (Optional)
+
+The freemoney feature allows users to claim free DOG tokens once per address. This feature is **disabled by default** and can be enabled by providing a private key for the drip wallet.
+
+**To Enable:**
+1. Set `DRIP_KEY` environment variable in server with a wallet private key
+2. Ensure the wallet has sufficient DOG tokens and ETH for gas
+3. Feature automatically enables when valid key is detected
+
+**To Disable (Default):**
+1. Leave `DRIP_KEY` blank or unset
+2. Server will start normally without freemoney functionality
+3. API endpoints return "feature disabled" errors if accessed
+
+**Frontend Route:**
+- Path: `/freemoney`
+- Hidden from navigation (`showOnDesktop: false`, `showOnMobile: false`)
+- Can be accessed directly when feature is enabled server-side
+
+**API Endpoints (when enabled):**
+- `POST /v1/freemoney` - Claim free tokens
+- `GET /v1/freemoney/balance` - Check drip wallet balance
+- `GET /v1/freemoney/txs/:address` - Get user's claim history
+- `GET /v1/freemoney/txs` - Get all claims
 
 ## Troubleshooting
 
