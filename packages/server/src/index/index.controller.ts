@@ -12,6 +12,6 @@ export class IndexController {
   @Get('')
   getIndex() {
     const addresses = this.contracts.getContractAddresses();
-    return `${this.app.wow}\n\nPX Contract: ${addresses.pixel}\nDOG Contract: ${addresses.dog}`;
+    return `${this.app.wow}\n\nPX Contract:\n${addresses.pixel}\n\nDOG Contract:\n${addresses.dog}`;
   }
 }

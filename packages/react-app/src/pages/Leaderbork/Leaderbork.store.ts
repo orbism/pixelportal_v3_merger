@@ -266,7 +266,7 @@ class LeaderborkStore extends Reactionable(EmptyClass) {
     const l2 = await AppStore.web3.getGlobalTransfers();
     
     // Only fetch L1 transfers on Ethereum mainnet
-    const l1 = AppStore.l1.addressToPuppers ? await AppStore.l1.getGlobalTransfers() : [];
+    const l1 = AppStore.l1.isL1Enabled ? await AppStore.l1.getGlobalTransfers() : [];
 
     const transfers = orderBy([...l1, ...l2], "blockCreatedAt", "desc");
 
@@ -279,7 +279,7 @@ class LeaderborkStore extends Reactionable(EmptyClass) {
     const l2 = await AppStore.web3.getUserTransfers(this.selectedAddress);
     
     // Only fetch L1 transfers on Ethereum mainnet
-    const l1 = AppStore.l1.addressToPuppers ? await AppStore.l1.getUserTransfers(this.selectedAddress) : [];
+    const l1 = AppStore.l1.isL1Enabled ? await AppStore.l1.getUserTransfers(this.selectedAddress) : [];
 
     const transfers = orderBy([...l1, ...l2], "blockCreatedAt", "desc");
 

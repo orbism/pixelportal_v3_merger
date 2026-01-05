@@ -15,19 +15,22 @@ interface AddressToPuppers {
 class L1Store {
   @observable
   addressToPuppers?: AddressToPuppers;
+  
+  @observable
+  isL1Enabled: boolean = false;
 
   constructor() {
     makeObservable(this);
 
-    this.addressToPuppers = {};
+    // Only initialize L1 data on Ethereum mainnet (chainId 1)
+    this.isL1Enabled = env.chain.id === 1;
+    this.addressToPuppers = this.isL1Enabled ? {} : undefined;
 
     this.init();
   }
 
   init() {
-    // Only fetch L1 data on Ethereum mainnet (chainId 1)
-    // L1 API contains historical mainnet pixel data, not needed for testnet
-    if (env.chain.id === 1) {
+    if (this.isL1Enabled) {
       this.getPixelOwnershipMap();
     }
   }
