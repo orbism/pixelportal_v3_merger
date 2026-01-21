@@ -66,3 +66,4 @@ const SubmissionModal = observer(({ isOpen, onClose, isSuccess, ticketId, errorM
 
 export default SubmissionModal;
 
+
