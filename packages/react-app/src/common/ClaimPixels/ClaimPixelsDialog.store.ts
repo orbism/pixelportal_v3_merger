@@ -162,13 +162,18 @@ class ClaimPixelsDialogStore extends Reactionable(
     });
 
     try {
-      // Load eligibility from snapshot
+      // Load eligibility from snapshot (required)
       await this.loadEligibility();
-      // Load claimable pixels from V3 contract
-      await this.loadClaimablePixels();
+
+      // Load claimable pixels from V3 contract (optional - may fail if not reserved yet)
+      try {
+        await this.loadClaimablePixels();
+      } catch (error) {
+        console.warn("Could not load claimable pixels (this is OK if none are reserved yet):", error);
+      }
     } catch (error) {
       console.error("Init failed:", error);
-      showErrorToast("Failed to load migration data");
+      showErrorToast("Failed to load claim data");
     } finally {
       runInAction(() => {
         this.isLoading = false;
@@ -178,17 +183,28 @@ class ClaimPixelsDialogStore extends Reactionable(
 
   async loadEligibility() {
     try {
-      console.log("Loading migration eligibility for:", AppStore.web3.address);
-      const data = await AppStore.web3.getMigrationEligibility(AppStore.web3.address!);
+      const address = AppStore.web3.address;
+      console.log("📋 Loading migration eligibility for:", address);
+
+      if (!address) {
+        console.warn("⚠️ No wallet address connected");
+        return;
+      }
+
+      const data = await AppStore.web3.getMigrationEligibility(address);
+
+      console.log("✅ Eligibility loaded:", JSON.stringify(data));
+      console.log(`   Mainnet pixels: ${data.mainnet.length}`, data.mainnet);
+      console.log(`   Base pixels: ${data.base.length}`, data.base);
 
       runInAction(() => {
         this.eligibility = data;
       });
-
-      console.log("Eligibility loaded:", data);
-    } catch (error) {
-      console.error("Failed to load eligibility:", error);
-      // Don't throw - let user see empty state
+    } catch (error: any) {
+      console.error("❌ Failed to load eligibility:", error);
+      console.error("   Error details:", error.message);
+      // Rethrow so init() knows it failed
+      throw error;
     }
   }
 

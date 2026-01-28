@@ -29,7 +29,8 @@ export class MigrationService {
    */
   private loadSnapshot() {
     try {
-      const snapshotPath = path.join(__dirname, '../../migration-snapshot.json');
+      // In compiled output: dist/migration/ -> ../migration-snapshot.json = dist/migration-snapshot.json
+      const snapshotPath = path.join(__dirname, '../migration-snapshot.json');
 
       if (fs.existsSync(snapshotPath)) {
         const data = fs.readFileSync(snapshotPath, 'utf-8');
