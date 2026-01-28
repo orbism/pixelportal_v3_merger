@@ -27,6 +27,7 @@ import {
   NotEnoughBalanceError,
   NotEnoughEthBalanceError,
 } from './free-money/free-money.service';
+import { MigrationService } from './migration/migration.service';
 import { OwnTheDogeContractService } from './ownthedoge-contracts/ownthedoge-contracts.service';
 import { PixelTransferRepository } from './pixel-transfer/pixel-transfer.repository';
 import { PixelTransferService } from './pixel-transfer/pixel-transfer.service';
@@ -45,6 +46,7 @@ export class AppController {
     private readonly gecko: CoinGeckoService,
     private readonly app: AppService,
     private readonly freeMoney: FreeMoneyService,
+    private readonly migration: MigrationService,
     private configService: ConfigService<Configuration>,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
@@ -324,6 +326,108 @@ export class AppController {
         throw new BadRequestException('FreeMoney feature is currently disabled');
       }
       throw e;
+    }
+  }
+
+  // ============================================
+  // Migration Endpoints (V1/V2 -> V3)
+  // ============================================
+
+  @Get('migration/eligible/:address')
+  async getMigrationEligibility(@Param() { address }: { address: string }) {
+    if (!this.ethers.getIsValidEthereumAddress(address)) {
+      throw new BadRequestException('Invalid Ethereum address');
+    }
+    return this.migration.getEligiblePixels(address);
+  }
+
+  @Get('migration/stats')
+  getMigrationStats() {
+    return this.migration.getSnapshotStats();
+  }
+
+  @Get('migration/reload')
+  reloadMigrationSnapshot() {
+    return this.migration.reloadSnapshot();
+  }
+
+  // ============================================
+  // Admin Endpoints for Burn Verification
+  // ============================================
+
+  /**
+   * Set burn flags for reserved pixels after verifying V1/V2 burn on-chain
+   * This marks pixels as eligible for claiming in V3
+   */
+  @Post('admin/set-burn-flags')
+  async setBurnFlags(
+    @Body() { tokenIds, burnStatuses }: { tokenIds: number[]; burnStatuses?: boolean[] },
+  ) {
+    this.logger.log(`setBurnFlags request for tokens: ${tokenIds.join(', ')}`);
+
+    if (!tokenIds || !Array.isArray(tokenIds) || tokenIds.length === 0) {
+      throw new BadRequestException('tokenIds array is required');
+    }
+
+    // Default all statuses to true if not provided
+    const statuses = burnStatuses || tokenIds.map(() => true);
+
+    try {
+      const receipt = await this.pixels.setBurnFlags(tokenIds, statuses);
+      return {
+        success: true,
+        txHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        tokensUpdated: tokenIds.length,
+      };
+    } catch (error) {
+      this.logger.error(`setBurnFlags failed: ${error.message}`);
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  /**
+   * Reserve tokens for a user before they burn V1/V2 pixels
+   * This is typically done based on snapshot data
+   */
+  @Post('admin/reserve-tokens')
+  async reserveTokens(
+    @Body() { tokenIds, recipients }: { tokenIds: number[]; recipients: string[] },
+  ) {
+    this.logger.log(`reserveTokens request for ${tokenIds.length} tokens`);
+
+    if (!tokenIds || !Array.isArray(tokenIds) || tokenIds.length === 0) {
+      throw new BadRequestException('tokenIds array is required');
+    }
+
+    if (!recipients || !Array.isArray(recipients) || recipients.length !== tokenIds.length) {
+      throw new BadRequestException('recipients array must match tokenIds length');
+    }
+
+    try {
+      const receipt = await this.pixels.reserveTokensForMigration(tokenIds, recipients);
+      return {
+        success: true,
+        txHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        tokensReserved: tokenIds.length,
+      };
+    } catch (error) {
+      this.logger.error(`reserveTokens failed: ${error.message}`);
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  /**
+   * Get reservation status for a specific token
+   */
+  @Get('admin/reservation/:tokenId')
+  async getReservation(@Param() { tokenId }: { tokenId: string }) {
+    try {
+      const reservation = await this.pixels.getReservation(Number(tokenId));
+      return reservation;
+    } catch (error) {
+      throw new BadRequestException(error.message);
     }
   }
 }

@@ -5,6 +5,15 @@ import { computed, makeObservable, observable, action, reaction, runInAction, ov
 import { DOG20, PX } from "../../../hardhat/types";
 import { showErrorToast } from "../DSL/Toast/Toast";
 import deployedContracts from "../contracts/abi.json";
+import {
+  LEGACY_PX_ABI,
+  CHAIN_IDS,
+  NETWORK_NAMES,
+  getV1ContractAddress,
+  getV2ContractAddress,
+  getV1ChainId,
+  getV2ChainId,
+} from "../contracts/legacyContracts";
 import env from "../environment";
 import { ObjectKeys } from "../helpers/objects";
 import { abbreviate } from "../helpers/strings";
@@ -549,6 +558,157 @@ class Web3Store extends Reactionable(Web3providerStore) {
     }).then(({ data }) => {
       return data;
     });
+  }
+
+  // ============================================
+  // V1/V2 Legacy Contract Methods for Migration
+  // ============================================
+
+  /**
+   * Check if current environment is testnet
+   */
+  get isTestnet(): boolean {
+    return this.targetChainId === CHAIN_IDS.BASE_SEPOLIA || this.targetChainId === 1337 || this.targetChainId === 31337;
+  }
+
+  /**
+   * Get V1 contract address based on environment
+   */
+  get v1ContractAddress(): string {
+    return getV1ContractAddress(this.isTestnet);
+  }
+
+  /**
+   * Get V2 contract address based on environment
+   */
+  get v2ContractAddress(): string {
+    return getV2ContractAddress(this.isTestnet);
+  }
+
+  /**
+   * Get V1 chain ID based on environment
+   */
+  get v1ChainId(): number {
+    return getV1ChainId(this.isTestnet);
+  }
+
+  /**
+   * Get V2 chain ID based on environment
+   */
+  get v2ChainId(): number {
+    return getV2ChainId(this.isTestnet);
+  }
+
+  /**
+   * Get network display name for a chain ID
+   */
+  getNetworkDisplayName(chainId: number): string {
+    return NETWORK_NAMES[chainId as keyof typeof NETWORK_NAMES] || `Chain ${chainId}`;
+  }
+
+  /**
+   * Request wallet to switch to a specific network
+   */
+  async switchNetwork(chainId: number): Promise<boolean> {
+    try {
+      // @ts-ignore - ethereum is injected by wallet
+      await window.ethereum?.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: `0x${chainId.toString(16)}` }],
+      });
+      return true;
+    } catch (error: any) {
+      // 4902 = chain not added to wallet
+      if (error.code === 4902) {
+        console.log("Chain not added to wallet, need to add it first");
+        // Could add chain here if needed
+      }
+      console.error("Failed to switch network:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Get current wallet chain ID
+   */
+  async getCurrentChainId(): Promise<number | null> {
+    try {
+      // @ts-ignore - ethereum is injected by wallet
+      const chainIdHex = await window.ethereum?.request({ method: "eth_chainId" });
+      return chainIdHex ? parseInt(chainIdHex, 16) : null;
+    } catch (error) {
+      console.error("Failed to get current chain ID:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Create a contract instance for V1 (Ethereum Mainnet/Sepolia)
+   * Uses the connected wallet's signer
+   */
+  getV1Contract(): Contract {
+    if (!this.signer) {
+      throw new Error("Wallet not connected");
+    }
+    return new Contract(this.v1ContractAddress, LEGACY_PX_ABI, this.signer);
+  }
+
+  /**
+   * Create a contract instance for V2 (Base/Base Sepolia)
+   * Uses the connected wallet's signer
+   */
+  getV2Contract(): Contract {
+    if (!this.signer) {
+      throw new Error("Wallet not connected");
+    }
+    return new Contract(this.v2ContractAddress, LEGACY_PX_ABI, this.signer);
+  }
+
+  /**
+   * Burn pixels on V1 contract (Ethereum)
+   * User must be on Ethereum network
+   * @param tokenIds Array of pixel token IDs to burn
+   */
+  async burnV1Pixels(tokenIds: number[]): Promise<ethers.ContractTransaction> {
+    const currentChainId = await this.getCurrentChainId();
+    if (currentChainId !== this.v1ChainId) {
+      throw new Error(`Please switch to ${this.getNetworkDisplayName(this.v1ChainId)} to burn V1 pixels`);
+    }
+
+    const contract = this.getV1Contract();
+    console.log(`Burning ${tokenIds.length} pixels on V1:`, tokenIds);
+    return contract.burnPuppers(tokenIds);
+  }
+
+  /**
+   * Burn pixels on V2 contract (Base)
+   * User must be on Base network
+   * @param tokenIds Array of pixel token IDs to burn
+   */
+  async burnV2Pixels(tokenIds: number[]): Promise<ethers.ContractTransaction> {
+    const currentChainId = await this.getCurrentChainId();
+    if (currentChainId !== this.v2ChainId) {
+      throw new Error(`Please switch to ${this.getNetworkDisplayName(this.v2ChainId)} to burn V2 pixels`);
+    }
+
+    const contract = this.getV2Contract();
+    console.log(`Burning ${tokenIds.length} pixels on V2:`, tokenIds);
+    return contract.burnPuppers(tokenIds);
+  }
+
+  /**
+   * Fetch migration eligibility from server
+   * Returns pixel IDs grouped by network that user is eligible to claim
+   */
+  async getMigrationEligibility(address: string): Promise<{ mainnet: number[]; base: number[] }> {
+    try {
+      const response = await Http.get(`/v1/migration/eligible/${address}`);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch migration eligibility:", error);
+      // Return empty if endpoint not available yet
+      return { mainnet: [], base: [] };
+    }
   }
 }
 

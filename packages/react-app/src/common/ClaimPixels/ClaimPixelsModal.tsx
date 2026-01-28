@@ -16,7 +16,13 @@ const ClaimPixelsModal = observer(({ isOpen, onClose, onSuccess, onCompleteClose
   const store = useMemo(() => new ClaimPixelsDialogStore(), []);
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Claim Pixels" description="Claim your reserved pixels from V1/V2">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Claim Your V3 Pixels"
+      description="Burn v1/v2 pixels and claim them in v3"
+      size="lg"
+    >
       <Box>
         <ClaimPixelsDialog store={store} onSuccess={onSuccess} onCompleteClose={onCompleteClose} />
       </Box>
@@ -25,4 +31,3 @@ const ClaimPixelsModal = observer(({ isOpen, onClose, onSuccess, onCompleteClose
 });
 
 export default ClaimPixelsModal;
-

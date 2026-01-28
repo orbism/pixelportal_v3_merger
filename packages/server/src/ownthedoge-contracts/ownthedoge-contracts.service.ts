@@ -520,4 +520,91 @@ export class OwnTheDogeContractService implements OnModuleInit {
   async getDripEthBalance() {
     return this.ethersService.provider.getBalance(this.dripDogSigner.address);
   }
+
+  // ============================================
+  // Migration Admin Functions
+  // ============================================
+
+  /**
+   * Set burn flags for reserved pixels (admin only)
+   * This marks pixels as eligible for claiming after V1/V2 burn is confirmed
+   * @param tokenIds Array of token IDs to set burn flags for
+   * @param burnStatuses Array of boolean statuses (true = burn confirmed)
+   */
+  async setBurnFlags(tokenIds: number[], burnStatuses: boolean[]): Promise<ethers.TransactionReceipt> {
+    if (!this.dripDogSigner) {
+      throw new Error('Admin wallet not configured - DRIP_KEY not set');
+    }
+
+    if (tokenIds.length !== burnStatuses.length) {
+      throw new Error('tokenIds and burnStatuses arrays must have the same length');
+    }
+
+    if (tokenIds.length === 0) {
+      throw new Error('No token IDs provided');
+    }
+
+    this.logger.log(`Setting burn flags for ${tokenIds.length} tokens: ${tokenIds.join(', ')}`);
+
+    // Get PX contract with signer for write operations
+    const pxContractWithSigner = await this.getPxContract(this.dripDogSigner);
+
+    try {
+      const tx = await pxContractWithSigner.setBurnFlags(tokenIds, burnStatuses);
+      this.logger.log(`setBurnFlags tx submitted: ${tx.hash}`);
+
+      const receipt = await tx.wait();
+      this.logger.log(`setBurnFlags tx confirmed in block ${receipt.blockNumber}`);
+
+      return receipt;
+    } catch (error) {
+      this.logger.error(`Failed to set burn flags: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Reserve tokens for migration (admin only)
+   * This sets up the reservation before the user burns V1/V2 pixels
+   * @param tokenIds Array of token IDs to reserve
+   * @param recipients Array of addresses to reserve for
+   */
+  async reserveTokensForMigration(tokenIds: number[], recipients: string[]): Promise<ethers.TransactionReceipt> {
+    if (!this.dripDogSigner) {
+      throw new Error('Admin wallet not configured - DRIP_KEY not set');
+    }
+
+    if (tokenIds.length !== recipients.length) {
+      throw new Error('tokenIds and recipients arrays must have the same length');
+    }
+
+    this.logger.log(`Reserving ${tokenIds.length} tokens for migration`);
+
+    const pxContractWithSigner = await this.getPxContract(this.dripDogSigner);
+
+    try {
+      const tx = await pxContractWithSigner.reserveTokensForMigration(tokenIds, recipients);
+      this.logger.log(`reserveTokensForMigration tx submitted: ${tx.hash}`);
+
+      const receipt = await tx.wait();
+      this.logger.log(`reserveTokensForMigration tx confirmed in block ${receipt.blockNumber}`);
+
+      return receipt;
+    } catch (error) {
+      this.logger.error(`Failed to reserve tokens: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Get reservation status for a token
+   */
+  async getReservation(tokenId: number): Promise<{ reservedFor: string; burnConfirmed: boolean }> {
+    if (!this.pxContract) {
+      throw new Error('PX contract not initialized');
+    }
+
+    const [reservedFor, burnConfirmed] = await this.pxContract.getReservation(tokenId);
+    return { reservedFor, burnConfirmed };
+  }
 }
