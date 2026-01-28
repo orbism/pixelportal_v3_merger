@@ -13,6 +13,10 @@
 const webpack = require('webpack');
 
 module.exports = function override(config) {
+  // Remove ForkTsCheckerWebpackPlugin to avoid Node 18+ compatibility issues
+  config.plugins = config.plugins.filter(
+    plugin => !plugin.constructor.name.includes('ForkTsChecker')
+  );
   const fallback = config.resolve.fallback || {};
   Object.assign(fallback, {
     "crypto": require.resolve("crypto-browserify"),

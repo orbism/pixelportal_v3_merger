@@ -93,7 +93,7 @@
   },
   "scripts": {
     "analyze": "source-map-explorer 'build/static/js/*.js'",
-    "build": "react-app-rewired build",
+    "build": "CI=false DISABLE_ESLINT_PLUGIN=true react-app-rewired build",
     "start": "cross-env PORT=3001 react-app-rewired start",
     "prestart": "yarn create-contracts && yarn write-build-number",
     "create-contracts": "node ./scripts/create_contracts.js",
