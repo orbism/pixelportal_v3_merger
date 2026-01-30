@@ -212,9 +212,20 @@ class ClaimPixelsDialogStore extends Reactionable(
     try {
       console.log("Loading claimable pixels for:", AppStore.web3.address);
 
+      // Combine all eligible token IDs from both networks
+      const allEligibleTokenIds = [
+        ...this.eligibility.mainnet,
+        ...this.eligibility.base,
+      ];
+
+      if (allEligibleTokenIds.length === 0) {
+        console.log("No eligible tokens to check");
+        return;
+      }
+
       const result = await AppStore.web3.getReservedTokensForUser(
         AppStore.web3.address!,
-        100
+        allEligibleTokenIds
       );
 
       const claimablePixels: ReservedPixel[] = [];

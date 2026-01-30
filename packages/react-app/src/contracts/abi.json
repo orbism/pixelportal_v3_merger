@@ -335,9 +335,9 @@
                   "internalType": "address"
                 },
                 {
-                  "name": "limit",
-                  "type": "uint256",
-                  "internalType": "uint256"
+                  "name": "tokenIdsToCheck",
+                  "type": "uint256[]",
+                  "internalType": "uint256[]"
                 }
               ],
               "outputs": [
@@ -2373,9 +2373,9 @@
                   "internalType": "address"
                 },
                 {
-                  "name": "limit",
-                  "type": "uint256",
-                  "internalType": "uint256"
+                  "name": "tokenIdsToCheck",
+                  "type": "uint256[]",
+                  "internalType": "uint256[]"
                 }
               ],
               "outputs": [

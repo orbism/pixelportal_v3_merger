@@ -430,11 +430,11 @@ class Web3Store extends Reactionable(Web3providerStore) {
   }
 
   // Claim reserved pixels (V1/V2 migration)
-  async getReservedTokensForUser(address: string, limit: number = 100) {
+  async getReservedTokensForUser(address: string, tokenIdsToCheck: number[]) {
     if (!this.pxContract) {
       throw new Error("PX contract not initialized");
     }
-    return this.pxContract.getReservedTokensForUser(address, limit);
+    return this.pxContract.getReservedTokensForUser(address, tokenIdsToCheck);
   }
 
   async claimReservedToken(tokenId: number) {
