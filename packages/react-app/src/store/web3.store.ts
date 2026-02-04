@@ -123,12 +123,20 @@ class Web3Store extends Reactionable(Web3providerStore) {
     this.cowStore = new CowStore();
 
     // safer contract access
-    const chainData = deployedContracts[this.targetChainId.toString()];
+    const chainIdStr = this.targetChainId.toString();
+    const chainData = deployedContracts[chainIdStr];
+    console.log(`Looking for contracts: chainId=${chainIdStr}, networkName=${this.targetNetworkName}`);
+    console.log(`Available chains in abi.json:`, Object.keys(deployedContracts));
+
     if (chainData && chainData[this.targetNetworkName] && chainData[this.targetNetworkName].contracts) {
-      this.pxContractAddress = chainData[this.targetNetworkName].contracts["PX"].address || "";
-      this.dogContractAddress = chainData[this.targetNetworkName].contracts["DOG20"].address || "";
+      this.pxContractAddress = chainData[this.targetNetworkName].contracts["PX"]?.address || "";
+      this.dogContractAddress = chainData[this.targetNetworkName].contracts["DOG20"]?.address || "";
+      console.log(`Found contracts: PX=${this.pxContractAddress}, DOG20=${this.dogContractAddress}`);
     } else {
-      console.error("Contract addresses not found for the specified chain ID and network name.");
+      console.error(`Contract addresses not found for chain ${chainIdStr} / ${this.targetNetworkName}`);
+      if (chainData) {
+        console.error(`Available networks for chain ${chainIdStr}:`, Object.keys(chainData));
+      }
     }
 
     this.initializeProvider();

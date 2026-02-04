@@ -77,13 +77,27 @@ const getContractAddress = (contractName: 'PX' | 'DOG20'): string => {
   // Otherwise get from hardhat_contracts.json
   const chainId = getChainId();
   const networkName = getNetworkName();
-  const contracts = deployedContracts[chainId.toString()]?.[networkName]?.contracts;
+  const chainIdStr = chainId.toString();
+
+  console.log(`[getContractAddress] Looking for ${contractName}: chainId=${chainIdStr}, networkName=${networkName}`);
+  console.log(`[getContractAddress] Available chains:`, Object.keys(deployedContracts));
+
+  const chainData = deployedContracts[chainIdStr];
+  if (chainData) {
+    console.log(`[getContractAddress] Available networks for chain ${chainIdStr}:`, Object.keys(chainData));
+  } else {
+    console.warn(`[getContractAddress] No chain data found for ${chainIdStr}`);
+  }
+
+  const contracts = chainData?.[networkName]?.contracts;
   const address = contracts?.[contractName]?.address || '';
-  
+
   if (!address) {
     console.warn(`No ${contractName} address found for chain ${chainId} / ${networkName}`);
+  } else {
+    console.log(`[getContractAddress] Found ${contractName}: ${address}`);
   }
-  
+
   return address;
 };
 
