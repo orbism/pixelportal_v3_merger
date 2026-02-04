@@ -28,6 +28,7 @@ import {
   NotEnoughEthBalanceError,
 } from './free-money/free-money.service';
 import { MigrationService } from './migration/migration.service';
+import { BurnVerificationService } from './burn-verification/burn-verification.service';
 import { OwnTheDogeContractService } from './ownthedoge-contracts/ownthedoge-contracts.service';
 import { PixelTransferRepository } from './pixel-transfer/pixel-transfer.repository';
 import { PixelTransferService } from './pixel-transfer/pixel-transfer.service';
@@ -47,6 +48,7 @@ export class AppController {
     private readonly app: AppService,
     private readonly freeMoney: FreeMoneyService,
     private readonly migration: MigrationService,
+    private readonly burnVerification: BurnVerificationService,
     private configService: ConfigService<Configuration>,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
@@ -349,6 +351,37 @@ export class AppController {
   @Get('migration/reload')
   reloadMigrationSnapshot() {
     return this.migration.reloadSnapshot();
+  }
+
+  /**
+   * Verify that tokens were burned on V1/V2 and set burn flags on V3 contract.
+   * This enables users to claim their migrated pixels.
+   *
+   * @param tokenIds Array of token IDs to verify
+   * @param network Network where tokens should be burned ('mainnet' for V1, 'base' for V2)
+   */
+  @Post('migration/verify-burns')
+  async verifyBurns(
+    @Body() { tokenIds, network }: { tokenIds: number[]; network: 'mainnet' | 'base' },
+  ) {
+    if (!tokenIds || !Array.isArray(tokenIds) || tokenIds.length === 0) {
+      throw new BadRequestException('tokenIds array is required');
+    }
+    if (!['mainnet', 'base'].includes(network)) {
+      throw new BadRequestException('network must be "mainnet" or "base"');
+    }
+    if (tokenIds.length > 50) {
+      throw new BadRequestException('Maximum 50 tokens per request');
+    }
+
+    this.logger.log(`Verify burns request: ${tokenIds.length} tokens on ${network}`);
+
+    try {
+      return await this.burnVerification.verifyAndSetBurnFlags(tokenIds, network);
+    } catch (error) {
+      this.logger.error(`Verify burns failed: ${error.message}`);
+      throw new BadRequestException(error.message);
+    }
   }
 
   // ============================================

@@ -22,6 +22,7 @@ import { BasenamesService } from './basenames/basenames.service';
 import { FreeMoneyService } from './free-money/free-money.service';
 import { ImageGeneratorService } from './image-generator/image-generator.service';
 import { MigrationService } from './migration/migration.service';
+import { BurnVerificationService } from './burn-verification/burn-verification.service';
 import { IndexController } from './index/index.controller';
 import { NetworkService } from './network/network.service';
 import { OwnTheDogeContractService } from './ownthedoge-contracts/ownthedoge-contracts.service';
@@ -88,6 +89,7 @@ import { SupportService } from './support/support.service';
     EmailService,
     SupportService,
     MigrationService,
+    BurnVerificationService,
   ],
 })
 export class AppModule {}

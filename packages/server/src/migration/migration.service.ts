@@ -109,4 +109,15 @@ export class MigrationService {
       base: baseCount,
     };
   }
+
+  /**
+   * Check if a specific token ID is in the snapshot for a given network
+   * @param tokenId The token ID to check
+   * @param network The network to check ('mainnet' for V1, 'base' for V2)
+   */
+  isTokenInSnapshot(tokenId: number, network: 'mainnet' | 'base'): boolean {
+    return this.snapshot.some(
+      (entry) => entry.id === tokenId && entry.network === network,
+    );
+  }
 }
