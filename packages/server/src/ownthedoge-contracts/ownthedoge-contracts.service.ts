@@ -34,6 +34,7 @@ export class OwnTheDogeContractService implements OnModuleInit {
   public imageWidth = 640;
   public imageHeight = 480;
   private pixelToIDOffset = 1000000;
+  private cachedDimensions: { width: string; height: string } | null = null;
 
   constructor(
     @Inject(forwardRef(() => PixelTransferService))
@@ -440,10 +441,15 @@ export class OwnTheDogeContractService implements OnModuleInit {
   }
 
   async getDimensions() {
+    // Return cached dimensions if available (these never change)
+    if (this.cachedDimensions) {
+      return this.cachedDimensions;
+    }
+
     try {
       // Wait for contract initialization (max 10s)
       await this.waitForContracts(10000);
-      
+
       if (!this.pxContract) {
         throw new Error('PX contract not initialized');
       }
@@ -459,10 +465,13 @@ export class OwnTheDogeContractService implements OnModuleInit {
       const heightNumber =
         typeof height === 'bigint' ? height.toString() : height;
 
-      return {
+      // Cache the result since dimensions never change
+      this.cachedDimensions = {
         width: widthNumber,
         height: heightNumber,
       };
+
+      return this.cachedDimensions;
     } catch (error) {
       this.logger.error('Failed to get dimensions:', error);
       throw error;

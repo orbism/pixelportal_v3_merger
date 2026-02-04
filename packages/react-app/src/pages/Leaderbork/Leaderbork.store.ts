@@ -134,7 +134,10 @@ class LeaderborkStore extends Reactionable(EmptyClass) {
       this.lockedDog = Number(balance);
       console.log("debug:: locked dog", this.lockedDog);
     });
-    AppStore.web3.getPixelOwnershipMap();
+    // Only fetch if not already loaded (avoid duplicate calls from web3.init())
+    if (!AppStore.web3.addressToPuppers || Object.keys(AppStore.web3.addressToPuppers).length === 0) {
+      AppStore.web3.getPixelOwnershipMap();
+    }
     // AppStore.web3.getPercentDogInPixels().then(({ data: percent }) => (this.dogLockedInPixels = percent));
     if (!this.selectedAddress) {
       this.getGlobalTransfers().then(_ => {
