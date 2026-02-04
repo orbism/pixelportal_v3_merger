@@ -284,38 +284,51 @@ export class OwnTheDogeContractService implements OnModuleInit {
 
     let totalLogs = 0;
     let currentBlock = fromBlock;
+    const maxRetries = 3;
 
     for (let i = fromBlock; i <= toBlock; i += step + 1) {
       const chunkStart = i;
       const chunkEnd = Math.min(i + step, toBlock);
-      
-      try {
-        this.logger.log(`Fetching logs for blocks ${chunkStart} to ${chunkEnd}...`);
-        const _logs = await this.pxContract.queryFilter(filter, chunkStart, chunkEnd);
-        this.logger.log(`Got ${_logs.length} logs for this chunk`);
-        
-        // Save chunk immediately
-        if (_logs.length > 0) {
-          await this.pixelTransferService.upsertTransfersFromLogs(_logs as ethers.EventLog[]);
-          this.logger.log(`Saved ${_logs.length} transfers to DB`);
+      let retryCount = 0;
+      let success = false;
+
+      while (!success && retryCount < maxRetries) {
+        try {
+          this.logger.log(`Fetching logs for blocks ${chunkStart} to ${chunkEnd}...`);
+          const _logs = await this.pxContract.queryFilter(filter, chunkStart, chunkEnd);
+          this.logger.log(`Got ${_logs.length} logs for this chunk`);
+
+          // Save chunk immediately
+          if (_logs.length > 0) {
+            await this.pixelTransferService.upsertTransfersFromLogs(_logs as ethers.EventLog[]);
+            this.logger.log(`Saved ${_logs.length} transfers to DB`);
+          }
+
+          totalLogs += _logs.length;
+          currentBlock = chunkEnd;
+
+          // Update sync cursor
+          await this.updateSyncCursor(chunkEnd);
+          success = true;
+
+          // Throttle to avoid rate limits
+          if (i + step + 1 <= toBlock) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+          }
+        } catch (error) {
+          retryCount++;
+          const isRateLimit = error.message?.includes('429') || error.message?.includes('exceeded');
+          const backoffMs = isRateLimit ? delayMs * Math.pow(2, retryCount) : delayMs;
+
+          this.logger.error(`Failed to fetch/save chunk ${chunkStart}-${chunkEnd}: ${error.message}`);
+
+          if (retryCount < maxRetries) {
+            this.logger.warn(`Retry ${retryCount}/${maxRetries} after ${backoffMs}ms...`);
+            await new Promise(resolve => setTimeout(resolve, backoffMs));
+          } else {
+            this.logger.warn(`Max retries reached, skipping chunk ${chunkStart}-${chunkEnd}`);
+          }
         }
-        
-        totalLogs += _logs.length;
-        currentBlock = chunkEnd;
-        
-        // Update sync cursor
-        await this.updateSyncCursor(chunkEnd);
-        
-        // Throttle to avoid rate limits
-        if (i + step + 1 <= toBlock) {
-          this.logger.log(`Waiting ${delayMs}ms before next chunk...`);
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-        }
-      } catch (error) {
-        this.logger.error(`Failed to fetch/save chunk ${chunkStart}-${chunkEnd}: ${error.message}`);
-        this.logger.warn(`Continuing to next chunk...`);
-        // Continue to next chunk instead of crashing
-        continue;
       }
     }
     
