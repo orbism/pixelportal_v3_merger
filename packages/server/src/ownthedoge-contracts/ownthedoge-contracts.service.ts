@@ -269,7 +269,8 @@ export class OwnTheDogeContractService implements OnModuleInit {
     this.logger.log(
       `Getting pixel transfers from block: ${fromBlock} to block: ${toBlock}`,
     );
-    const step = 1000;
+    // Configurable block range (default 10 for Alchemy free tier)
+    const step = this.configService.get('rpcBlockRangeLimit') || 10;
     // Configurable rate limit delay (default 500ms for Alchemy free tier)
     const delayMs = this.configService.get('rpcRateLimitDelayMs') || 500;
     const filter = this.pxContract.filters.Transfer(null, null);

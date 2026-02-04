@@ -63,6 +63,7 @@ export interface Configuration {
     v2: { address: string; chainId: number };
   };
   rpcRateLimitDelayMs: number;
+  rpcBlockRangeLimit: number;
 }
 
 export default () => ({
@@ -131,4 +132,7 @@ export default () => ({
   // Alchemy free tier: 500 CUPs, eth_getLogs = 75 CUs = ~6 req/sec max
   // Default 500ms = 2 req/sec to stay safely under limit with headroom for other requests
   rpcRateLimitDelayMs: parseInt(process.env.RPC_RATE_LIMIT_DELAY_MS) || 500,
+  // Alchemy free tier limits eth_getLogs to 10 block range
+  // Paid plans can use larger ranges (e.g., 2000)
+  rpcBlockRangeLimit: parseInt(process.env.RPC_BLOCK_RANGE_LIMIT) || 10,
 });
