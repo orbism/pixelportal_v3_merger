@@ -61,6 +61,7 @@ export interface Configuration {
   legacyContracts: {
     v1: { address: string; chainId: number };
     v2: { address: string; chainId: number };
+    v2Testnet: { chainId: number };
   };
   rpcRateLimitDelayMs: number;
   rpcBlockRangeLimit: number;
@@ -127,6 +128,10 @@ export default () => ({
     v2: {
       address: '0xAfb89a09D82FBDE58f18Ac6437B3fC81724e4dF6',
       chainId: 8453,
+    },
+    // Base Sepolia testnet - loaded from abi.json in burn-verification service
+    v2Testnet: {
+      chainId: 84532,
     },
   },
   // Alchemy free tier: 500 CUPs, eth_getLogs = 75 CUs = ~6 req/sec max

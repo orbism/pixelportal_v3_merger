@@ -5,12 +5,13 @@ import * as path from 'path';
 interface SnapshotEntry {
   address: string;
   id: number;
-  network: 'mainnet' | 'base';
+  network: 'mainnet' | 'base' | 'base-sepolia';
 }
 
 export interface EligibilityResult {
   mainnet: number[];
   base: number[];
+  'base-sepolia': number[];
 }
 
 @Injectable()
@@ -58,13 +59,14 @@ export class MigrationService {
   /**
    * Get eligible pixel IDs for a given address, grouped by network
    * @param address The wallet address to check
-   * @returns Object with mainnet and base arrays of token IDs
+   * @returns Object with mainnet, base, and base-sepolia arrays of token IDs
    */
   getEligiblePixels(address: string): EligibilityResult {
     const normalizedAddress = address.toLowerCase();
 
     const mainnetPixels: number[] = [];
     const basePixels: number[] = [];
+    const baseSepoliaPixels: number[] = [];
 
     for (const entry of this.snapshot) {
       if (entry.address.toLowerCase() === normalizedAddress) {
@@ -72,17 +74,20 @@ export class MigrationService {
           mainnetPixels.push(entry.id);
         } else if (entry.network === 'base') {
           basePixels.push(entry.id);
+        } else if (entry.network === 'base-sepolia') {
+          baseSepoliaPixels.push(entry.id);
         }
       }
     }
 
     this.logger.debug(
-      `Eligibility for ${address}: mainnet=${mainnetPixels.length}, base=${basePixels.length}`,
+      `Eligibility for ${address}: mainnet=${mainnetPixels.length}, base=${basePixels.length}, base-sepolia=${baseSepoliaPixels.length}`,
     );
 
     return {
       mainnet: mainnetPixels,
       base: basePixels,
+      'base-sepolia': baseSepoliaPixels,
     };
   }
 
@@ -99,23 +104,25 @@ export class MigrationService {
   /**
    * Get total count of entries in snapshot
    */
-  getSnapshotStats(): { total: number; mainnet: number; base: number } {
+  getSnapshotStats(): { total: number; mainnet: number; base: number; 'base-sepolia': number } {
     const mainnetCount = this.snapshot.filter((e) => e.network === 'mainnet').length;
     const baseCount = this.snapshot.filter((e) => e.network === 'base').length;
+    const baseSepoliaCount = this.snapshot.filter((e) => e.network === 'base-sepolia').length;
 
     return {
       total: this.snapshot.length,
       mainnet: mainnetCount,
       base: baseCount,
+      'base-sepolia': baseSepoliaCount,
     };
   }
 
   /**
    * Check if a specific token ID is in the snapshot for a given network
    * @param tokenId The token ID to check
-   * @param network The network to check ('mainnet' for V1, 'base' for V2)
+   * @param network The network to check ('mainnet' for V1, 'base' for V2, 'base-sepolia' for testnet)
    */
-  isTokenInSnapshot(tokenId: number, network: 'mainnet' | 'base'): boolean {
+  isTokenInSnapshot(tokenId: number, network: 'mainnet' | 'base' | 'base-sepolia'): boolean {
     return this.snapshot.some(
       (entry) => entry.id === tokenId && entry.network === network,
     );

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Contract, JsonRpcProvider } from 'ethers';
 import { Configuration } from '../config/configuration';
 import { LEGACY_PX_ABI } from '../contracts/legacyAbi';
+import * as contractData from '../contracts/abi.json';
 import { MigrationService } from '../migration/migration.service';
 import { OwnTheDogeContractService } from '../ownthedoge-contracts/ownthedoge-contracts.service';
 
@@ -23,8 +24,10 @@ export class BurnVerificationService implements OnModuleInit {
 
   private ethereumProvider: JsonRpcProvider | null = null;
   private baseProvider: JsonRpcProvider | null = null;
+  private baseSepoliaProvider: JsonRpcProvider | null = null;
   private v1Contract: Contract | null = null;
   private v2Contract: Contract | null = null;
+  private v2TestnetContract: Contract | null = null;
 
   constructor(
     private readonly configService: ConfigService<Configuration>,
@@ -72,14 +75,48 @@ export class BurnVerificationService implements OnModuleInit {
     } catch (error) {
       this.logger.error('Failed to initialize Base provider:', error);
     }
+
+    // Initialize Base Sepolia provider for V2 testnet burn checks
+    // Read contract address from abi.json deployment data
+    const baseSepoliaContract = contractData?.['84532']?.['base-sepolia']?.contracts?.PX;
+    if (baseSepoliaContract?.address) {
+      try {
+        const baseSepoliaRpc = `https://base-sepolia.g.alchemy.com/v2/${alchemyKey}`;
+        this.baseSepoliaProvider = new JsonRpcProvider(baseSepoliaRpc);
+        this.v2TestnetContract = new Contract(
+          baseSepoliaContract.address,
+          LEGACY_PX_ABI,
+          this.baseSepoliaProvider,
+        );
+        this.logger.log(`Base Sepolia provider initialized for testnet burn verification (${baseSepoliaContract.address})`);
+      } catch (error) {
+        this.logger.error('Failed to initialize Base Sepolia provider:', error);
+      }
+    }
+  }
+
+  /**
+   * Get the contract for a given network
+   */
+  private getContractForNetwork(network: 'mainnet' | 'base' | 'base-sepolia'): Contract | null {
+    switch (network) {
+      case 'mainnet':
+        return this.v1Contract;
+      case 'base':
+        return this.v2Contract;
+      case 'base-sepolia':
+        return this.v2TestnetContract;
+      default:
+        return null;
+    }
   }
 
   /**
    * Check if a token is burned on the legacy contract
    * A token is considered burned if ownerOf() reverts
    */
-  async isTokenBurned(tokenId: number, network: 'mainnet' | 'base'): Promise<boolean> {
-    const contract = network === 'mainnet' ? this.v1Contract : this.v2Contract;
+  async isTokenBurned(tokenId: number, network: 'mainnet' | 'base' | 'base-sepolia'): Promise<boolean> {
+    const contract = this.getContractForNetwork(network);
 
     if (!contract) {
       throw new Error(`${network} provider not configured`);
@@ -96,17 +133,17 @@ export class BurnVerificationService implements OnModuleInit {
   /**
    * Verify burns for multiple tokens and set burn flags on V3 contract
    * @param tokenIds Array of token IDs to verify
-   * @param network Network where tokens should be burned ('mainnet' for V1, 'base' for V2)
+   * @param network Network where tokens should be burned ('mainnet' for V1, 'base' for V2, 'base-sepolia' for testnet)
    */
   async verifyAndSetBurnFlags(
     tokenIds: number[],
-    network: 'mainnet' | 'base',
+    network: 'mainnet' | 'base' | 'base-sepolia',
   ): Promise<VerifyBurnsResult> {
     const results: TokenResult[] = [];
     const burnedTokenIds: number[] = [];
 
     // Check if provider is configured for this network
-    const contract = network === 'mainnet' ? this.v1Contract : this.v2Contract;
+    const contract = this.getContractForNetwork(network);
     if (!contract) {
       return {
         results: tokenIds.map((tokenId) => ({

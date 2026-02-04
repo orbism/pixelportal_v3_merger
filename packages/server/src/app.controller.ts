@@ -358,17 +358,17 @@ export class AppController {
    * This enables users to claim their migrated pixels.
    *
    * @param tokenIds Array of token IDs to verify
-   * @param network Network where tokens should be burned ('mainnet' for V1, 'base' for V2)
+   * @param network Network where tokens should be burned ('mainnet' for V1, 'base' for V2, 'base-sepolia' for testnet)
    */
   @Post('migration/verify-burns')
   async verifyBurns(
-    @Body() { tokenIds, network }: { tokenIds: number[]; network: 'mainnet' | 'base' },
+    @Body() { tokenIds, network }: { tokenIds: number[]; network: 'mainnet' | 'base' | 'base-sepolia' },
   ) {
     if (!tokenIds || !Array.isArray(tokenIds) || tokenIds.length === 0) {
       throw new BadRequestException('tokenIds array is required');
     }
-    if (!['mainnet', 'base'].includes(network)) {
-      throw new BadRequestException('network must be "mainnet" or "base"');
+    if (!['mainnet', 'base', 'base-sepolia'].includes(network)) {
+      throw new BadRequestException('network must be "mainnet", "base", or "base-sepolia"');
     }
     if (tokenIds.length > 50) {
       throw new BadRequestException('Maximum 50 tokens per request');
