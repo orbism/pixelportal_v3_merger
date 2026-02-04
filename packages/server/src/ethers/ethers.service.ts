@@ -66,16 +66,40 @@ export class EthersService implements OnModuleInit {
     this.initWS();
   }
 
-  initWS() {
+  async initWS() {
     const wsUrl =
       process.env.CB_WS_ENDPOINT || this.configService.get('cb').wsEndpoint;
+
+    this.logger.log(`Connecting to WebSocket: ${wsUrl ? wsUrl.substring(0, 50) + '...' : 'NOT SET'}`);
+
+    if (!wsUrl) {
+      this.logger.error('CB_WS_ENDPOINT not configured! RPC calls will fail.');
+      return;
+    }
+
     this.provider = new ethers.WebSocketProvider(wsUrl);
 
-    this.eventEmitter.emit(Events.ETHERS_WS_PROVIDER_CONNECTED, this.provider);
+    // Wait for WebSocket to actually connect before emitting event
+    try {
+      // Test the connection with a simple call
+      const network = await Promise.race([
+        this.provider.getNetwork(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('WebSocket connection timeout (10s)')), 10000)
+        ),
+      ]);
+      this.logger.log(`WebSocket connected to network: ${network.name} (chainId: ${network.chainId})`);
+      this.eventEmitter.emit(Events.ETHERS_WS_PROVIDER_CONNECTED, this.provider);
+    } catch (error) {
+      this.logger.error(`WebSocket connection failed: ${error.message}`);
+      // Still emit event but log the failure - endpoints will handle the error
+      this.eventEmitter.emit(Events.ETHERS_WS_PROVIDER_CONNECTED, this.provider);
+    }
 
     this.keepAlive({
       provider: this.provider,
       onDisconnect: () => {
+        this.logger.warn('WebSocket disconnected, reconnecting...');
         this.initWS();
       },
     });

@@ -60,7 +60,10 @@ export class AppController {
 
   @Get('config')
   async getOwnershipConfig() {
-    return this.pixelTransferService.getBalances();
+    this.logger.log('GET /v1/config - fetching balances');
+    const result = await this.pixelTransferService.getBalances();
+    this.logger.log('GET /v1/config - complete');
+    return result;
   }
 
   @Get('config/refresh')
@@ -94,7 +97,10 @@ export class AppController {
 
   @Get('px/dimensions')
   async getPictureDimensions() {
-    return this.pixels.getDimensions();
+    this.logger.log('GET /v1/px/dimensions - fetching dimensions');
+    const result = await this.pixels.getDimensions();
+    this.logger.log('GET /v1/px/dimensions - complete');
+    return result;
   }
 
   @Get('px/balance/:address')
