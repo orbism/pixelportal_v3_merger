@@ -20,9 +20,15 @@ async function bootstrap() {
 
   app.enableCors({
     "origin": (origin, callback) => {
-      if (!origin || /\.ownthedoge\.com$/.test(origin) || /\.vercel\.app$/.test(origin)) {
+      // Allow: no origin (server-to-server), *.ownthedoge.com, *.vercel.app, *.cucked.me, localhost
+      if (!origin ||
+          /\.ownthedoge\.com$/.test(origin) ||
+          /\.vercel\.app$/.test(origin) ||
+          /\.doge\.cucked\.me$/.test(origin) ||
+          /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
         callback(null, true);
       } else {
+        console.log(`CORS blocked origin: ${origin}`);
         callback(new Error('Not allowed by CORS'));
       }
     },
