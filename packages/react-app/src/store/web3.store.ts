@@ -93,7 +93,7 @@ class Web3Store extends Reactionable(Web3providerStore) {
     // console.log("Deployed Contracts:", JSON.stringify(deployedContracts, null, 2));
     // console.log("Target Chain ID:", this.targetChainId.toString());
     // console.log("Target Network Name:", this.targetNetworkName);
-    console.log("Specific Network Contract Data:", deployedContracts[this.targetChainId]?.[this.targetNetworkName]);
+    console.log("Specific Network Contract Data:", deployedContracts[this.targetChainId.toString()]?.[this.targetNetworkName]);
 
     makeObservable(this);
     reaction(
