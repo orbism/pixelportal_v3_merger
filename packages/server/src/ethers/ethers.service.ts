@@ -84,13 +84,13 @@ export class EthersService implements OnModuleInit {
       // Test the connection with a simple call
       const network = await Promise.race([
         this.provider.getNetwork(),
-        new Promise((_, reject) =>
+        new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('WebSocket connection timeout (10s)')), 10000)
         ),
       ]);
       this.logger.log(`WebSocket connected to network: ${network.name} (chainId: ${network.chainId})`);
       this.eventEmitter.emit(Events.ETHERS_WS_PROVIDER_CONNECTED, this.provider);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`WebSocket connection failed: ${error.message}`);
       // Still emit event but log the failure - endpoints will handle the error
       this.eventEmitter.emit(Events.ETHERS_WS_PROVIDER_CONNECTED, this.provider);
