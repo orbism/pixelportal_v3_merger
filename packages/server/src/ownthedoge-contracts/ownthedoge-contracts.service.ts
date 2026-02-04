@@ -286,9 +286,10 @@ export class OwnTheDogeContractService implements OnModuleInit {
     let currentBlock = fromBlock;
     const maxRetries = 3;
 
-    for (let i = fromBlock; i <= toBlock; i += step + 1) {
+    for (let i = fromBlock; i <= toBlock; i += step) {
       const chunkStart = i;
-      const chunkEnd = Math.min(i + step, toBlock);
+      // step is the number of blocks, so end = start + step - 1 for inclusive range
+      const chunkEnd = Math.min(i + step - 1, toBlock);
       let retryCount = 0;
       let success = false;
 
@@ -312,7 +313,7 @@ export class OwnTheDogeContractService implements OnModuleInit {
           success = true;
 
           // Throttle to avoid rate limits
-          if (i + step + 1 <= toBlock) {
+          if (i + step <= toBlock) {
             await new Promise(resolve => setTimeout(resolve, delayMs));
           }
         } catch (error) {
