@@ -54,6 +54,11 @@ export class OwnTheDogeContractService implements OnModuleInit {
 
   @OnEvent(Events.ETHERS_WS_PROVIDER_CONNECTED)
   async handleProviderConnected(provider: WebSocketProvider) {
+    // Skip if already connected (onModuleInit may have already called this)
+    if (this.isConnectedToContracts) {
+      this.logger.log('Contracts already initialized, skipping duplicate event');
+      return;
+    }
     this.onProviderConnected(provider);
   }
 
