@@ -58,6 +58,7 @@ export interface Configuration {
   phSecret: string;
   dripKey: string;
   freeMoneyEnabled: boolean;
+  burnVerificationKey: string;
   legacyContracts: {
     v1: { address: string; chainId: number };
     v2: { address: string; chainId: number };
@@ -120,6 +121,7 @@ export default () => ({
   phSecret: process.env.PH_SECRET,
   dripKey: process.env.DRIP_KEY || '',
   freeMoneyEnabled: !!(process.env.DRIP_KEY && process.env.DRIP_KEY.trim()),
+  burnVerificationKey: process.env.BURN_VERIFICATION_KEY || '',
   legacyContracts: {
     v1: {
       address: '0xBAac2B4491727D78D2b78815144570b9f2Fe8899',

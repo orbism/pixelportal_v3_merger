@@ -29,6 +29,7 @@ export class OwnTheDogeContractService implements OnModuleInit {
   private pxContractAddress: string;
   private dogContractAddress: string;
   private dripDogSigner: ethers.Wallet;
+  private burnVerificationSigner: ethers.Wallet;
 
   public imageWidth = 640;
   public imageHeight = 480;
@@ -80,6 +81,14 @@ export class OwnTheDogeContractService implements OnModuleInit {
       this.logger.log('FreeMoney feature enabled - drip wallet initialized');
     } else {
       this.logger.log('FreeMoney feature disabled - no DRIP_KEY provided');
+    }
+
+    const burnVerificationKey = this.configService.get('burnVerificationKey');
+    if (burnVerificationKey && burnVerificationKey.trim()) {
+      this.burnVerificationSigner = new ethers.Wallet(burnVerificationKey, provider);
+      this.logger.log('Burn verification enabled - admin wallet initialized');
+    } else {
+      this.logger.log('Burn verification disabled - no BURN_VERIFICATION_KEY provided');
     }
     await this.connectToContracts(provider);
     this.initPixelListener();
@@ -548,8 +557,8 @@ export class OwnTheDogeContractService implements OnModuleInit {
    * @param burnStatuses Array of boolean statuses (true = burn confirmed)
    */
   async setBurnFlags(tokenIds: number[], burnStatuses: boolean[]): Promise<ethers.TransactionReceipt> {
-    if (!this.dripDogSigner) {
-      throw new Error('Admin wallet not configured - DRIP_KEY not set');
+    if (!this.burnVerificationSigner) {
+      throw new Error('Burn verification wallet not configured - BURN_VERIFICATION_KEY not set');
     }
 
     if (tokenIds.length !== burnStatuses.length) {
@@ -563,7 +572,7 @@ export class OwnTheDogeContractService implements OnModuleInit {
     this.logger.log(`Setting burn flags for ${tokenIds.length} tokens: ${tokenIds.join(', ')}`);
 
     // Get PX contract with signer for write operations
-    const pxContractWithSigner = await this.getPxContract(this.dripDogSigner);
+    const pxContractWithSigner = await this.getPxContract(this.burnVerificationSigner);
 
     try {
       const tx = await pxContractWithSigner.setBurnFlags(tokenIds, burnStatuses);
@@ -586,8 +595,8 @@ export class OwnTheDogeContractService implements OnModuleInit {
    * @param recipients Array of addresses to reserve for
    */
   async reserveTokensForMigration(tokenIds: number[], recipients: string[]): Promise<ethers.TransactionReceipt> {
-    if (!this.dripDogSigner) {
-      throw new Error('Admin wallet not configured - DRIP_KEY not set');
+    if (!this.burnVerificationSigner) {
+      throw new Error('Burn verification wallet not configured - BURN_VERIFICATION_KEY not set');
     }
 
     if (tokenIds.length !== recipients.length) {
@@ -596,7 +605,7 @@ export class OwnTheDogeContractService implements OnModuleInit {
 
     this.logger.log(`Reserving ${tokenIds.length} tokens for migration`);
 
-    const pxContractWithSigner = await this.getPxContract(this.dripDogSigner);
+    const pxContractWithSigner = await this.getPxContract(this.burnVerificationSigner);
 
     try {
       const tx = await pxContractWithSigner.reserveTokensForMigration(tokenIds, recipients);
