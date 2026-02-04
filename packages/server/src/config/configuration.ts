@@ -62,6 +62,7 @@ export interface Configuration {
     v1: { address: string; chainId: number };
     v2: { address: string; chainId: number };
   };
+  rpcRateLimitDelayMs: number;
 }
 
 export default () => ({
@@ -127,4 +128,7 @@ export default () => ({
       chainId: 8453,
     },
   },
+  // Alchemy free tier: 500 CUPs, eth_getLogs = 75 CUs = ~6 req/sec max
+  // Default 500ms = 2 req/sec to stay safely under limit with headroom for other requests
+  rpcRateLimitDelayMs: parseInt(process.env.RPC_RATE_LIMIT_DELAY_MS) || 500,
 });
