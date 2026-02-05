@@ -182,7 +182,16 @@ class Web3Store extends Reactionable(Web3providerStore) {
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   }
 
+  private _initialized = false;
+
   async init() {
+    // Guard against double init (constructor calls init, and App.store.init also calls it)
+    if (this._initialized) {
+      console.log('🚀 Web3Store.init() skipped - already initialized');
+      return;
+    }
+    this._initialized = true;
+
     console.log('🚀 Web3Store.init() called');
     try {
       await this.getPixelOwnershipMap();
