@@ -159,12 +159,14 @@ export class PixelTransferService {
   }
 
   async getBalances() {
+    this.logger.log('getBalances: starting database query...');
     const transfers = await this.pixelTransfers.findMany({
       distinct: ['tokenId'],
       orderBy: {
         insertedAt: 'desc',
       },
     });
+    this.logger.log(`getBalances: found ${transfers.length} transfers`);
 
     interface TokenState {
       address: string;
@@ -201,6 +203,9 @@ export class PixelTransferService {
     }
 
     // Get ENS/Basename names with timeout protection
+    const addressCount = Object.keys(balances).length;
+    this.logger.log(`getBalances: looking up ENS for ${addressCount} addresses...`);
+
     for (const address in balances) {
       try {
         // Try cache first, fallback to fresh lookup (includes Basenames)
@@ -222,7 +227,7 @@ export class PixelTransferService {
       }
     }
 
-    this.logger.log('Final balances:', JSON.stringify(balances, null, 2));
+    this.logger.log(`getBalances: complete, returning ${addressCount} addresses`);
     return balances;
   }
 
