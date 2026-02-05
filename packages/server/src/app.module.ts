@@ -49,15 +49,18 @@ import { SupportService } from './support/support.service';
       timeout: 5000,
     }),
     CacheModule.registerAsync({
-      useFactory: (config: ConfigService<Configuration>) => ({
-        store: redisStore,
-        url: config.get('redis').url,
-        ttl: 10,
-        max: 10000,
-        tls: {
-          rejectUnauthorized: false,
-        },
-      }),
+      useFactory: (config: ConfigService<Configuration>) => {
+        const redisUrl = config.get('redis').url;
+        const isLocalhost = redisUrl?.includes('localhost') || redisUrl?.includes('127.0.0.1');
+        return {
+          store: redisStore,
+          url: redisUrl,
+          ttl: 10,
+          max: 10000,
+          // Only use TLS for non-localhost (production) Redis
+          ...(isLocalhost ? {} : { tls: { rejectUnauthorized: false } }),
+        };
+      },
       inject: [ConfigService],
     }),
     ScheduleModule.forRoot(),
