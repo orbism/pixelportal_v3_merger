@@ -1,5 +1,6 @@
 import { EventLog } from 'ethers';
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
 import { ethers } from 'ethers';
 import { EthersService } from '../ethers/ethers.service';
@@ -12,6 +13,7 @@ import { PixelTransferRepository } from './pixel-transfer.repository';
 @Injectable()
 export class PixelTransferService {
   private readonly logger = new Logger(PixelTransferService.name);
+  private readonly hasAlchemyKey: boolean;
 
   constructor(
     @Inject(forwardRef(() => OwnTheDogeContractService))
@@ -20,7 +22,13 @@ export class PixelTransferService {
     private readonly pixelTransfers: PixelTransferRepository,
     private readonly ethers: EthersService,
     private readonly ud: UnstoppableDomainsService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.hasAlchemyKey = !!this.configService.get('alchemyKey');
+    if (!this.hasAlchemyKey) {
+      this.logger.warn('ALCHEMY_KEY not configured - ENS lookups will be skipped');
+    }
+  }
 
   async syncAll() {
     this.logger.log('Syncing all pixel transfer events');
@@ -202,28 +210,39 @@ export class PixelTransferService {
       }
     }
 
-    // Get ENS/Basename names with timeout protection
+    // Get ENS/Basename names with timeout protection (skip if no Alchemy key)
     const addressCount = Object.keys(balances).length;
-    this.logger.log(`getBalances: looking up ENS for ${addressCount} addresses...`);
 
-    for (const address in balances) {
-      try {
-        // Try cache first, fallback to fresh lookup (includes Basenames)
-        let ens = await this.ethers.getCachedEnsName(address);
-        if (!ens) {
-          ens = await Promise.race([
-            this.ethers.getEnsName(address),
-            new Promise<string>((_, reject) => setTimeout(() => reject(new Error('ENS timeout')), 3000))
-          ]);
-          // Cache the result if found
-          if (ens) {
-            await this.ethers.refreshEnsCache(address);
-          }
-        }
-        balances[address].ens = ens || null;
-      } catch (error) {
-        this.logger.warn(`Failed to get ENS/Basename for ${address}:`, error.message);
+    if (!this.hasAlchemyKey) {
+      this.logger.log(`getBalances: skipping ENS lookups (no ALCHEMY_KEY configured)`);
+      for (const address in balances) {
         balances[address].ens = null;
+      }
+    } else {
+      this.logger.log(`getBalances: looking up ENS for ${addressCount} addresses...`);
+
+      for (const address in balances) {
+        try {
+          // Try cache first, fallback to fresh lookup (includes Basenames)
+          let ens = await Promise.race([
+            this.ethers.getCachedEnsName(address),
+            new Promise<string | null>((_, reject) => setTimeout(() => reject(new Error('Cache timeout')), 2000))
+          ]);
+          if (!ens) {
+            ens = await Promise.race([
+              this.ethers.getEnsName(address),
+              new Promise<string | null>((_, reject) => setTimeout(() => reject(new Error('ENS timeout')), 3000))
+            ]);
+            // Cache the result if found
+            if (ens) {
+              await this.ethers.refreshEnsCache(address);
+            }
+          }
+          balances[address].ens = ens || null;
+        } catch (error) {
+          this.logger.warn(`Failed to get ENS/Basename for ${address}:`, error.message);
+          balances[address].ens = null;
+        }
       }
     }
 
