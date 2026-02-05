@@ -35,6 +35,7 @@ export class OwnTheDogeContractService implements OnModuleInit {
   public imageHeight = 480;
   private pixelToIDOffset = 1000000;
   private cachedDimensions: { width: string; height: string } | null = null;
+  private dimensionsFetchPromise: Promise<{ width: string; height: string }> | null = null;
 
   constructor(
     @Inject(forwardRef(() => PixelTransferService))
@@ -446,6 +447,23 @@ export class OwnTheDogeContractService implements OnModuleInit {
       return this.cachedDimensions;
     }
 
+    // If a fetch is already in progress, wait for it instead of starting another
+    if (this.dimensionsFetchPromise) {
+      return this.dimensionsFetchPromise;
+    }
+
+    // Start the fetch and store the promise so concurrent requests share it
+    this.dimensionsFetchPromise = this.fetchDimensionsFromContract();
+
+    try {
+      const result = await this.dimensionsFetchPromise;
+      return result;
+    } finally {
+      this.dimensionsFetchPromise = null;
+    }
+  }
+
+  private async fetchDimensionsFromContract(): Promise<{ width: string; height: string }> {
     try {
       // Wait for contract initialization (max 10s)
       await this.waitForContracts(10000);
