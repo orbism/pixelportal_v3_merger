@@ -134,13 +134,19 @@ const Index = () => {
 
 const container = document.getElementById("root");
 const root = createRoot(container);
+
+const AppContent = (
+  <>
+    <ColorModeScript initialColorMode={theme.config.initialColorMode} />
+    <ChakraProvider theme={theme} resetCSS>
+      <Index />
+    </ChakraProvider>
+  </>
+);
+
+// Disable StrictMode via REACT_APP_STRICT_MODE=false (enabled by default)
+const useStrictMode = process.env.REACT_APP_STRICT_MODE !== 'false';
+
 root.render(
-  <React.StrictMode>
-    <>
-      <ColorModeScript initialColorMode={theme.config.initialColorMode} />
-      <ChakraProvider theme={theme} resetCSS>
-        <Index />
-      </ChakraProvider>
-    </>
-  </React.StrictMode>,
+  useStrictMode ? <React.StrictMode>{AppContent}</React.StrictMode> : AppContent,
 );

@@ -1,4 +1,4 @@
-import { Box, Checkbox, Flex, SimpleGrid } from "@chakra-ui/react";
+import { Box, Checkbox, Divider, Flex, SimpleGrid, VStack, HStack, Alert, AlertIcon } from "@chakra-ui/react";
 import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
 import Button from "../../DSL/Button/Button";
@@ -9,7 +9,7 @@ import Typography, { TVariant } from "../../DSL/Typography/Typography";
 import { getEtherscanURL } from "../../helpers/links";
 import Link from "../../DSL/Link/Link";
 import SharePixelsDialog from "../SharePixelsDialog/SharePixelsDialog";
-import ClaimPixelsDialogStore, { ClaimPixelsModalView } from "./ClaimPixelsDialog.store";
+import ClaimPixelsDialogStore, { ClaimPixelsModalView, BurnNetwork } from "./ClaimPixelsDialog.store";
 import PixelPane from "../../DSL/PixelPane/PixelPane";
 
 interface ClaimPixelsDialogProps {
@@ -34,8 +34,13 @@ const ClaimPixelsDialog = observer(({ store, onSuccess, onCompleteClose }: Claim
 
   return (
     <>
-      {store.currentView === ClaimPixelsModalView.SelectPixels && <SelectPixels store={store} />}
-      {store.currentView === ClaimPixelsModalView.LoadingClaim && <LoadingClaim store={store} />}
+      {store.currentView === ClaimPixelsModalView.Overview && <Overview store={store} />}
+      {store.currentView === ClaimPixelsModalView.ConfirmBurn && <ConfirmBurn store={store} />}
+      {store.currentView === ClaimPixelsModalView.BurningMainnet && <BurningPixels store={store} network="mainnet" />}
+      {store.currentView === ClaimPixelsModalView.BurningBase && <BurningPixels store={store} network="base" />}
+      {store.currentView === ClaimPixelsModalView.WaitingForConfirmation && <WaitingForConfirmation store={store} />}
+      {store.currentView === ClaimPixelsModalView.ReadyToClaim && <ReadyToClaim store={store} />}
+      {store.currentView === ClaimPixelsModalView.ClaimingPixels && <ClaimingPixels store={store} />}
       {store.currentView === ClaimPixelsModalView.Complete && (
         <Complete store={store} txHash={store.txHash} onClose={onCompleteClose} />
       )}
@@ -43,46 +48,368 @@ const ClaimPixelsDialog = observer(({ store, onSuccess, onCompleteClose }: Claim
   );
 });
 
-const SelectPixels = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
+// ============================================
+// Overview View - Shows eligible pixels by network
+// ============================================
+const Overview = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
   if (store.isLoading) {
-    return <Loading title={"Loading claimable pixels..."} />;
+    return <Loading title={"Checking eligibility..."} />;
   }
 
-  if (store.claimablePixels.length === 0) {
+  const hasEligiblePixels = store.hasMainnetPixels || store.hasBasePixels;
+  const hasClaimablePixels = store.claimablePixels.length > 0;
+
+  if (!hasEligiblePixels && !hasClaimablePixels) {
     return (
       <Box textAlign="center" py={8}>
         <Typography variant={TVariant.PresStart20} block mb={4}>
           No Pixels to Claim
         </Typography>
         <Typography variant={TVariant.ComicSans16} block>
-          You do not have any pixels from Pixel Portal v1 or v2 that you have burned.
+          You do not have any pixels from Pixel Portal v1 or v2 that are eligible for claiming.
         </Typography>
       </Box>
     );
   }
 
   return (
-    <Flex flexDirection="column">
-      <Box mb={4}>
-        <Typography variant={TVariant.PresStart20} block textAlign="center">
+    <VStack spacing={6} align="stretch">
+      {/* Header */}
+      <Box textAlign="center">
+        <Typography variant={TVariant.PresStart20} block>
           Claim Your Pixels
         </Typography>
-        <Typography variant={TVariant.ComicSans14} block textAlign="center" mt={2}>
-          You have successfully burned your Pixels on v1 or v2 of the Portal. <br/>
-          You can now claim those very pixels here in the new and improved v3!
+        <Typography variant={TVariant.ComicSans14} block mt={2}>
+          Burn your v1/v2 pixels to receive $DOG back, then claim them in v3.
         </Typography>
       </Box>
 
-      <Flex justifyContent="space-between" mb={4}>
+      {/* Instructions */}
+      <Box bg="yellow.50" p={4} borderRadius="md" border="1px solid" borderColor="yellow.200">
+        <Typography variant={TVariant.ComicSans14} block fontWeight="bold" mb={2}>
+          How It Works:
+        </Typography>
+        <VStack align="start" spacing={1}>
+          <Typography variant={TVariant.ComicSans12}>
+            1. Burn your pixels on each network (Ethereum &amp; Base)
+          </Typography>
+          <Typography variant={TVariant.ComicSans12}>
+            2. Receive ~55,240 $DOG per pixel back (minus 1% fee)
+          </Typography>
+          <Typography variant={TVariant.ComicSans12}>
+            3. Bridge your $DOG to Base if needed (via Superbridge)
+          </Typography>
+          <Typography variant={TVariant.ComicSans12}>
+            4. Claim the same pixel IDs in v3 by locking $DOG again
+          </Typography>
+        </VStack>
+      </Box>
+
+      {/* Claimable Pixels Section - Show first if user has already burned */}
+      {hasClaimablePixels && (
+        <Box bg="green.50" p={4} borderRadius="md" border="2px solid" borderColor="green.400">
+          <HStack justify="space-between" align="center" mb={3}>
+            <Box>
+              <Typography variant={TVariant.PresStart14} block>
+                Ready to Claim
+              </Typography>
+              <Typography variant={TVariant.ComicSans12} block mt={1}>
+                {store.claimablePixels.length} pixel(s) ready
+              </Typography>
+            </Box>
+            <Button onClick={() => store.pushNavigation(ClaimPixelsModalView.ReadyToClaim)}>
+              Claim Now
+            </Button>
+          </HStack>
+        </Box>
+      )}
+
+      {/* Mainnet Pixels Section */}
+      {store.hasMainnetPixels && (
+        <NetworkSection
+          store={store}
+          network="mainnet"
+          title="Ethereum Mainnet (v1)"
+          pixelsToBurn={store.mainnetPixelsToBurn}
+          allPixels={store.eligibility.mainnet}
+          burnedPixels={store.burnedMainnet}
+        />
+      )}
+
+      {/* Base Pixels Section */}
+      {store.hasBasePixels && (
+        <NetworkSection
+          store={store}
+          network="base"
+          title="Base (v2)"
+          pixelsToBurn={store.basePixelsToBurn}
+          allPixels={store.eligibility.base}
+          burnedPixels={store.burnedBase}
+        />
+      )}
+
+      {/* Superbridge Link */}
+      {(store.burnedMainnet.length > 0 || store.hasMainnetPixels) && (
+        <Box textAlign="center" mt={2}>
+          <Typography variant={TVariant.ComicSans12} block>
+            Need to bridge $DOG from Ethereum to Base?
+          </Typography>
+          <Link href={store.superbridgeUrl} isExternal>
+            <Typography variant={TVariant.ComicSans14} color="blue.500">
+              Use Superbridge
+            </Typography>
+          </Link>
+        </Box>
+      )}
+    </VStack>
+  );
+});
+
+// ============================================
+// Network Section Component
+// ============================================
+interface NetworkSectionProps {
+  store: ClaimPixelsDialogStore;
+  network: BurnNetwork;
+  title: string;
+  pixelsToBurn: number[];
+  allPixels: number[];
+  burnedPixels: number[];
+}
+
+const NetworkSection = observer(({ store, network, title, pixelsToBurn, allPixels, burnedPixels }: NetworkSectionProps) => {
+  const allBurned = pixelsToBurn.length === 0 && burnedPixels.length > 0;
+
+  return (
+    <Box
+      p={4}
+      borderRadius="md"
+      border="1px solid"
+      borderColor={allBurned ? "green.300" : "gray.300"}
+      bg={allBurned ? "green.50" : "white"}
+    >
+      <HStack justify="space-between" align="center" mb={3}>
+        <Box>
+          <Typography variant={TVariant.PresStart14} block>
+            {title}
+          </Typography>
+          <Typography variant={TVariant.ComicSans12} block mt={1}>
+            {allBurned ? (
+              <span style={{ color: "green" }}>All {burnedPixels.length} pixels burned</span>
+            ) : (
+              `${pixelsToBurn.length} pixel(s) to burn`
+            )}
+          </Typography>
+        </Box>
+        {!allBurned && pixelsToBurn.length > 0 && (
+          <Button onClick={() => store.initiateBurn(network)} colorScheme="orange">
+            Burn All
+          </Button>
+        )}
+      </HStack>
+
+      {/* Pixel Grid Preview */}
+      {pixelsToBurn.length > 0 && (
+        <Box maxH="150px" overflowY="auto">
+          <SimpleGrid columns={{ base: 5, md: 8 }} spacing={2}>
+            {pixelsToBurn.slice(0, 16).map(tokenId => (
+              <Box key={tokenId} textAlign="center">
+                <PixelPane size="xs" pupper={tokenId} />
+                <Typography variant={TVariant.PresStart8}>#{tokenId}</Typography>
+              </Box>
+            ))}
+            {pixelsToBurn.length > 16 && (
+              <Box display="flex" alignItems="center" justifyContent="center">
+                <Typography variant={TVariant.ComicSans12}>+{pixelsToBurn.length - 16} more</Typography>
+              </Box>
+            )}
+          </SimpleGrid>
+        </Box>
+      )}
+    </Box>
+  );
+});
+
+// ============================================
+// Confirm Burn Modal
+// ============================================
+const ConfirmBurn = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
+  const network = store.pendingBurnNetwork;
+  const pixelCount = network === "mainnet" ? store.mainnetPixelsToBurn.length : store.basePixelsToBurn.length;
+  const networkName = network === "mainnet" ? "Ethereum Mainnet" : "Base";
+
+  return (
+    <VStack spacing={6} align="stretch">
+      <Box textAlign="center">
+        <Typography variant={TVariant.PresStart20} block>
+          Confirm Burn
+        </Typography>
+      </Box>
+
+      <Alert status="warning" borderRadius="md">
+        <AlertIcon />
+        <Typography variant={TVariant.ComicSans14}>
+          This action is irreversible. Your v{network === "mainnet" ? "1" : "2"} pixels will be permanently burned.
+        </Typography>
+      </Alert>
+
+      <Box bg="gray.50" p={4} borderRadius="md">
+        <Typography variant={TVariant.ComicSans14} block mb={2}>
+          <strong>Network:</strong> {networkName}
+        </Typography>
+        <Typography variant={TVariant.ComicSans14} block mb={2}>
+          <strong>Pixels to burn:</strong> {pixelCount}
+        </Typography>
+        <Typography variant={TVariant.ComicSans14} block>
+          <strong>$DOG to receive:</strong> ~{store.formatDogAmount(store.totalDogToReceiveFromBurn)} $DOG
+        </Typography>
+        <Typography variant={TVariant.ComicSans12} block mt={1} color="gray.500">
+          (99% after 1% burn fee)
+        </Typography>
+      </Box>
+
+      <Typography variant={TVariant.ComicSans14} block textAlign="center">
+        Your wallet will prompt you to switch networks and confirm the transaction.
+      </Typography>
+
+      <HStack justify="center" spacing={4}>
+        <Button onClick={() => store.cancelBurn()} variant="outline">
+          Cancel
+        </Button>
+        <Button onClick={() => store.confirmBurn()} colorScheme="orange">
+          Burn {pixelCount} Pixels
+        </Button>
+      </HStack>
+    </VStack>
+  );
+});
+
+// ============================================
+// Burning Pixels Loading State
+// ============================================
+const BurningPixels = observer(({ store, network }: { store: ClaimPixelsDialogStore; network: BurnNetwork }) => {
+  const networkName = network === "mainnet" ? "Ethereum Mainnet" : "Base";
+  const pixelCount = network === "mainnet" ? store.mainnetPixelsToBurn.length : store.basePixelsToBurn.length;
+
+  return (
+    <VStack spacing={6} align="stretch">
+      <Loading
+        title={`Burning pixels on ${networkName}...`}
+        showSigningHint={!store.hasUserSignedTx}
+      />
+      <Typography variant={TVariant.ComicSans14} textAlign="center">
+        Burning {pixelCount} pixel(s) on {networkName}
+      </Typography>
+      {store.txHash && (
+        <Box textAlign="center">
+          <Link href={getEtherscanURL(store.txHash, "tx")} isExternal>
+            <Typography variant={TVariant.ComicSans12} color="blue.500">
+              View transaction
+            </Typography>
+          </Link>
+        </Box>
+      )}
+      {store.burnError && (
+        <Alert status="error" borderRadius="md">
+          <AlertIcon />
+          <Typography variant={TVariant.ComicSans14}>{store.burnError}</Typography>
+        </Alert>
+      )}
+    </VStack>
+  );
+});
+
+// ============================================
+// Waiting for Confirmation
+// ============================================
+const WaitingForConfirmation = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
+  return (
+    <VStack spacing={6} align="stretch">
+      <Box textAlign="center">
+        <Typography variant={TVariant.PresStart20} block>
+          Burn Successful!
+        </Typography>
+      </Box>
+
+      <Alert status="info" borderRadius="md">
+        <AlertIcon />
+        <Typography variant={TVariant.ComicSans14}>
+          Waiting for the system to verify your burn transaction. This may take a few minutes.
+        </Typography>
+      </Alert>
+
+      <Loading title="Verifying burn..." />
+
+      <Typography variant={TVariant.ComicSans14} textAlign="center">
+        Once verified, you'll be able to claim your pixels in v3.
+      </Typography>
+
+      <Divider />
+
+      <Box textAlign="center">
+        <Typography variant={TVariant.ComicSans12} block mb={2}>
+          While waiting, make sure you have $DOG on Base to claim your pixels.
+        </Typography>
+        <Link href={store.superbridgeUrl} isExternal>
+          <Typography variant={TVariant.ComicSans14} color="blue.500">
+            Bridge $DOG via Superbridge
+          </Typography>
+        </Link>
+      </Box>
+    </VStack>
+  );
+});
+
+// ============================================
+// Ready to Claim - Select Pixels
+// ============================================
+const ReadyToClaim = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
+  if (store.claimablePixels.length === 0) {
+    return (
+      <Box textAlign="center" py={8}>
+        <Typography variant={TVariant.PresStart20} block mb={4}>
+          No Pixels Ready to Claim
+        </Typography>
+        <Typography variant={TVariant.ComicSans16} block>
+          You need to burn your v1/v2 pixels first before claiming in v3.
+        </Typography>
+        <Button mt={4} onClick={() => store.destroyNavigation() || store.pushNavigation(ClaimPixelsModalView.Overview)}>
+          Back to Overview
+        </Button>
+      </Box>
+    );
+  }
+
+  return (
+    <VStack spacing={4} align="stretch">
+      <Box textAlign="center">
+        <Typography variant={TVariant.PresStart20} block>
+          Claim Your Pixels
+        </Typography>
+        <Typography variant={TVariant.ComicSans14} block mt={2}>
+          Your burns have been verified. Select pixels to claim in v3.
+        </Typography>
+      </Box>
+
+      <Box bg="blue.50" p={3} borderRadius="md">
+        <Typography variant={TVariant.ComicSans12} block>
+          <strong>$DOG needed:</strong> ~{store.formatDogAmount(store.totalDogToLockForClaim)} $DOG
+        </Typography>
+        <Typography variant={TVariant.ComicSans10} block mt={1} color="gray.600">
+          (55,240 $DOG per pixel, locked in contract)
+        </Typography>
+      </Box>
+
+      <HStack justify="space-between">
         <Button size="sm" onClick={() => store.selectAll()} isDisabled={store.selectedPixels.length === store.claimablePixels.length}>
           Select All
         </Button>
         <Button size="sm" onClick={() => store.deselectAll()} isDisabled={store.selectedPixels.length === 0}>
           Deselect All
         </Button>
-      </Flex>
+      </HStack>
 
-      <Box maxH="400px" overflowY="auto" mb={4}>
+      <Box maxH="300px" overflowY="auto">
         <SimpleGrid columns={{ base: 3, md: 4 }} spacing={3}>
           {store.claimablePixels.map(pixel => {
             const isSelected = store.selectedPixels.includes(pixel.tokenId);
@@ -116,7 +443,7 @@ const SelectPixels = observer(({ store }: { store: ClaimPixelsDialogStore }) => 
         </SimpleGrid>
       </Box>
 
-      <Box textAlign="center" mb={4}>
+      <Box textAlign="center">
         <Typography variant={TVariant.ComicSans14}>
           Selected: {store.selectedPixels.length} / {store.claimablePixels.length}
         </Typography>
@@ -127,25 +454,34 @@ const SelectPixels = observer(({ store }: { store: ClaimPixelsDialogStore }) => 
           <Submit label="Claim Selected" isDisabled={!store.canClaim} />
         </Flex>
       </Form>
-    </Flex>
+    </VStack>
   );
 });
 
-const LoadingClaim = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
-  useEffect(() => {
-    store.claimSelectedPixels();
-  }, [store]);
-
+// ============================================
+// Claiming Pixels Loading State
+// ============================================
+const ClaimingPixels = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
   return (
-    <Box>
+    <VStack spacing={6}>
       <Loading title="Claiming pixels..." showSigningHint={!store.hasUserSignedTx} />
-      <Typography variant={TVariant.ComicSans14} textAlign="center" mt={4}>
-        Claiming {store.selectedPixels.length} pixel(s)...
+      <Typography variant={TVariant.ComicSans14} textAlign="center">
+        Claiming {store.selectedPixels.length} pixel(s) in v3...
       </Typography>
-    </Box>
+      {store.txHash && (
+        <Link href={getEtherscanURL(store.txHash, "tx")} isExternal>
+          <Typography variant={TVariant.ComicSans12} color="blue.500">
+            View transaction
+          </Typography>
+        </Link>
+      )}
+    </VStack>
   );
 });
 
+// ============================================
+// Complete - Success State
+// ============================================
 const Complete = observer(
   ({ store, txHash, onClose }: { store: ClaimPixelsDialogStore; txHash: string | null; onClose: () => void }) => {
     return (
@@ -153,12 +489,9 @@ const Complete = observer(
         <Typography variant={TVariant.PresStart28} textAlign="center" block>
           Pixels Claimed!
         </Typography>
-        <Typography variant={TVariant.PresStart28} textAlign="center" mt={4} block>
-          🎉🎉🎉
-        </Typography>
         <Box mt={4}>
           <Typography variant={TVariant.ComicSans16} textAlign="center" block>
-            Successfully claimed {store.claimedPixels.length} pixel(s)
+            Successfully claimed {store.claimedPixels.length} pixel(s) in v3!
           </Typography>
           <SharePixelsDialog action="claimed" previewPixels={store.claimedPixels} />
           <Flex justifyContent="center" mt={4}>
@@ -178,4 +511,3 @@ const Complete = observer(
 );
 
 export default ClaimPixelsDialog;
-

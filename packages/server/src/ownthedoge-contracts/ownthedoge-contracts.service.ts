@@ -29,10 +29,13 @@ export class OwnTheDogeContractService implements OnModuleInit {
   private pxContractAddress: string;
   private dogContractAddress: string;
   private dripDogSigner: ethers.Wallet;
+  private burnVerificationSigner: ethers.Wallet;
 
   public imageWidth = 640;
   public imageHeight = 480;
   private pixelToIDOffset = 1000000;
+  private cachedDimensions: { width: string; height: string } | null = null;
+  private dimensionsFetchPromise: Promise<{ width: string; height: string }> | null = null;
 
   constructor(
     @Inject(forwardRef(() => PixelTransferService))
@@ -53,6 +56,11 @@ export class OwnTheDogeContractService implements OnModuleInit {
 
   @OnEvent(Events.ETHERS_WS_PROVIDER_CONNECTED)
   async handleProviderConnected(provider: WebSocketProvider) {
+    // Skip if already connected (onModuleInit may have already called this)
+    if (this.isConnectedToContracts) {
+      this.logger.log('Contracts already initialized, skipping duplicate event');
+      return;
+    }
     this.onProviderConnected(provider);
   }
 
@@ -80,6 +88,14 @@ export class OwnTheDogeContractService implements OnModuleInit {
       this.logger.log('FreeMoney feature enabled - drip wallet initialized');
     } else {
       this.logger.log('FreeMoney feature disabled - no DRIP_KEY provided');
+    }
+
+    const burnVerificationKey = this.configService.get('burnVerificationKey');
+    if (burnVerificationKey && burnVerificationKey.trim()) {
+      this.burnVerificationSigner = new ethers.Wallet(burnVerificationKey, provider);
+      this.logger.log('Burn verification enabled - admin wallet initialized');
+    } else {
+      this.logger.log('Burn verification disabled - no BURN_VERIFICATION_KEY provided');
     }
     await this.connectToContracts(provider);
     this.initPixelListener();
@@ -269,8 +285,10 @@ export class OwnTheDogeContractService implements OnModuleInit {
     this.logger.log(
       `Getting pixel transfers from block: ${fromBlock} to block: ${toBlock}`,
     );
-    const step = 1000;
-    const delayMs = 3000;
+    // Configurable block range (default 10 for Alchemy free tier)
+    const step = this.configService.get('rpcBlockRangeLimit') || 10;
+    // Configurable rate limit delay (default 500ms for Alchemy free tier)
+    const delayMs = this.configService.get('rpcRateLimitDelayMs') || 500;
     const filter = this.pxContract.filters.Transfer(null, null);
 
     this.logger.log(`pxContract Address: ${this.pxContract.target}`);
@@ -282,38 +300,52 @@ export class OwnTheDogeContractService implements OnModuleInit {
 
     let totalLogs = 0;
     let currentBlock = fromBlock;
+    const maxRetries = 3;
 
-    for (let i = fromBlock; i <= toBlock; i += step + 1) {
+    for (let i = fromBlock; i <= toBlock; i += step) {
       const chunkStart = i;
-      const chunkEnd = Math.min(i + step, toBlock);
-      
-      try {
-        this.logger.log(`Fetching logs for blocks ${chunkStart} to ${chunkEnd}...`);
-        const _logs = await this.pxContract.queryFilter(filter, chunkStart, chunkEnd);
-        this.logger.log(`Got ${_logs.length} logs for this chunk`);
-        
-        // Save chunk immediately
-        if (_logs.length > 0) {
-          await this.pixelTransferService.upsertTransfersFromLogs(_logs as ethers.EventLog[]);
-          this.logger.log(`Saved ${_logs.length} transfers to DB`);
+      // step is the number of blocks, so end = start + step - 1 for inclusive range
+      const chunkEnd = Math.min(i + step - 1, toBlock);
+      let retryCount = 0;
+      let success = false;
+
+      while (!success && retryCount < maxRetries) {
+        try {
+          this.logger.log(`Fetching logs for blocks ${chunkStart} to ${chunkEnd}...`);
+          const _logs = await this.pxContract.queryFilter(filter, chunkStart, chunkEnd);
+          this.logger.log(`Got ${_logs.length} logs for this chunk`);
+
+          // Save chunk immediately
+          if (_logs.length > 0) {
+            await this.pixelTransferService.upsertTransfersFromLogs(_logs as ethers.EventLog[]);
+            this.logger.log(`Saved ${_logs.length} transfers to DB`);
+          }
+
+          totalLogs += _logs.length;
+          currentBlock = chunkEnd;
+
+          // Update sync cursor
+          await this.updateSyncCursor(chunkEnd);
+          success = true;
+
+          // Throttle to avoid rate limits
+          if (i + step <= toBlock) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+          }
+        } catch (error) {
+          retryCount++;
+          const isRateLimit = error.message?.includes('429') || error.message?.includes('exceeded');
+          const backoffMs = isRateLimit ? delayMs * Math.pow(2, retryCount) : delayMs;
+
+          this.logger.error(`Failed to fetch/save chunk ${chunkStart}-${chunkEnd}: ${error.message}`);
+
+          if (retryCount < maxRetries) {
+            this.logger.warn(`Retry ${retryCount}/${maxRetries} after ${backoffMs}ms...`);
+            await new Promise(resolve => setTimeout(resolve, backoffMs));
+          } else {
+            this.logger.warn(`Max retries reached, skipping chunk ${chunkStart}-${chunkEnd}`);
+          }
         }
-        
-        totalLogs += _logs.length;
-        currentBlock = chunkEnd;
-        
-        // Update sync cursor
-        await this.updateSyncCursor(chunkEnd);
-        
-        // Throttle to avoid rate limits
-        if (i + step + 1 <= toBlock) {
-          this.logger.log(`Waiting ${delayMs}ms before next chunk...`);
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-        }
-      } catch (error) {
-        this.logger.error(`Failed to fetch/save chunk ${chunkStart}-${chunkEnd}: ${error.message}`);
-        this.logger.warn(`Continuing to next chunk...`);
-        // Continue to next chunk instead of crashing
-        continue;
       }
     }
     
@@ -410,10 +442,32 @@ export class OwnTheDogeContractService implements OnModuleInit {
   }
 
   async getDimensions() {
+    // Return cached dimensions if available (these never change)
+    if (this.cachedDimensions) {
+      return this.cachedDimensions;
+    }
+
+    // If a fetch is already in progress, wait for it instead of starting another
+    if (this.dimensionsFetchPromise) {
+      return this.dimensionsFetchPromise;
+    }
+
+    // Start the fetch and store the promise so concurrent requests share it
+    this.dimensionsFetchPromise = this.fetchDimensionsFromContract();
+
+    try {
+      const result = await this.dimensionsFetchPromise;
+      return result;
+    } finally {
+      this.dimensionsFetchPromise = null;
+    }
+  }
+
+  private async fetchDimensionsFromContract(): Promise<{ width: string; height: string }> {
     try {
       // Wait for contract initialization (max 10s)
       await this.waitForContracts(10000);
-      
+
       if (!this.pxContract) {
         throw new Error('PX contract not initialized');
       }
@@ -429,10 +483,13 @@ export class OwnTheDogeContractService implements OnModuleInit {
       const heightNumber =
         typeof height === 'bigint' ? height.toString() : height;
 
-      return {
+      // Cache the result since dimensions never change
+      this.cachedDimensions = {
         width: widthNumber,
         height: heightNumber,
       };
+
+      return this.cachedDimensions;
     } catch (error) {
       this.logger.error('Failed to get dimensions:', error);
       throw error;
@@ -519,5 +576,92 @@ export class OwnTheDogeContractService implements OnModuleInit {
 
   async getDripEthBalance() {
     return this.ethersService.provider.getBalance(this.dripDogSigner.address);
+  }
+
+  // ============================================
+  // Migration Admin Functions
+  // ============================================
+
+  /**
+   * Set burn flags for reserved pixels (admin only)
+   * This marks pixels as eligible for claiming after V1/V2 burn is confirmed
+   * @param tokenIds Array of token IDs to set burn flags for
+   * @param burnStatuses Array of boolean statuses (true = burn confirmed)
+   */
+  async setBurnFlags(tokenIds: number[], burnStatuses: boolean[]): Promise<ethers.TransactionReceipt> {
+    if (!this.burnVerificationSigner) {
+      throw new Error('Burn verification wallet not configured - BURN_VERIFICATION_KEY not set');
+    }
+
+    if (tokenIds.length !== burnStatuses.length) {
+      throw new Error('tokenIds and burnStatuses arrays must have the same length');
+    }
+
+    if (tokenIds.length === 0) {
+      throw new Error('No token IDs provided');
+    }
+
+    this.logger.log(`Setting burn flags for ${tokenIds.length} tokens: ${tokenIds.join(', ')}`);
+
+    // Get PX contract with signer for write operations
+    const pxContractWithSigner = await this.getPxContract(this.burnVerificationSigner);
+
+    try {
+      const tx = await pxContractWithSigner.setBurnFlags(tokenIds, burnStatuses);
+      this.logger.log(`setBurnFlags tx submitted: ${tx.hash}`);
+
+      const receipt = await tx.wait();
+      this.logger.log(`setBurnFlags tx confirmed in block ${receipt.blockNumber}`);
+
+      return receipt;
+    } catch (error) {
+      this.logger.error(`Failed to set burn flags: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Reserve tokens for migration (admin only)
+   * This sets up the reservation before the user burns V1/V2 pixels
+   * @param tokenIds Array of token IDs to reserve
+   * @param recipients Array of addresses to reserve for
+   */
+  async reserveTokensForMigration(tokenIds: number[], recipients: string[]): Promise<ethers.TransactionReceipt> {
+    if (!this.burnVerificationSigner) {
+      throw new Error('Burn verification wallet not configured - BURN_VERIFICATION_KEY not set');
+    }
+
+    if (tokenIds.length !== recipients.length) {
+      throw new Error('tokenIds and recipients arrays must have the same length');
+    }
+
+    this.logger.log(`Reserving ${tokenIds.length} tokens for migration`);
+
+    const pxContractWithSigner = await this.getPxContract(this.burnVerificationSigner);
+
+    try {
+      const tx = await pxContractWithSigner.reserveTokensForMigration(tokenIds, recipients);
+      this.logger.log(`reserveTokensForMigration tx submitted: ${tx.hash}`);
+
+      const receipt = await tx.wait();
+      this.logger.log(`reserveTokensForMigration tx confirmed in block ${receipt.blockNumber}`);
+
+      return receipt;
+    } catch (error) {
+      this.logger.error(`Failed to reserve tokens: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Get reservation status for a token
+   */
+  async getReservation(tokenId: number): Promise<{ reservedFor: string; burnConfirmed: boolean }> {
+    if (!this.pxContract) {
+      throw new Error('PX contract not initialized');
+    }
+
+    const [reservedFor, burnConfirmed] = await this.pxContract.getReservation(tokenId);
+    return { reservedFor, burnConfirmed };
   }
 }

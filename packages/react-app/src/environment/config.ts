@@ -77,13 +77,27 @@ const getContractAddress = (contractName: 'PX' | 'DOG20'): string => {
   // Otherwise get from hardhat_contracts.json
   const chainId = getChainId();
   const networkName = getNetworkName();
-  const contracts = deployedContracts[chainId]?.[networkName]?.contracts;
+  const chainIdStr = chainId.toString();
+
+  console.log(`[getContractAddress] Looking for ${contractName}: chainId=${chainIdStr}, networkName=${networkName}`);
+  console.log(`[getContractAddress] Available chains:`, Object.keys(deployedContracts));
+
+  const chainData = deployedContracts[chainIdStr];
+  if (chainData) {
+    console.log(`[getContractAddress] Available networks for chain ${chainIdStr}:`, Object.keys(chainData));
+  } else {
+    console.warn(`[getContractAddress] No chain data found for ${chainIdStr}`);
+  }
+
+  const contracts = chainData?.[networkName]?.contracts;
   const address = contracts?.[contractName]?.address || '';
-  
+
   if (!address) {
     console.warn(`No ${contractName} address found for chain ${chainId} / ${networkName}`);
+  } else {
+    console.log(`[getContractAddress] Found ${contractName}: ${address}`);
   }
-  
+
   return address;
 };
 
@@ -92,18 +106,21 @@ const getServerUrl = (): string => {
   if (envServer) {
     return envServer;
   }
-  
-  // Auto-generate based on chain
-  const chainId = getChainId();
-  if (chainId === 1337 || chainId === 31337) {
-    return 'http://localhost:3003';
-  } else if (chainId === 8453) {
-    return 'https://base-v3.portalapi.ownthedoge.com';
-  } else if (chainId === 84532) {
-    return 'https://base-sepolia-v3.portalapi.ownthedoge.com';
+
+  // Fallback to localhost for local development only
+  // For production/staging, REACT_APP_SERVER_URL must be set
+  console.warn('REACT_APP_SERVER_URL not set, falling back to localhost:3003');
+  return 'http://localhost:3003';
+};
+
+const getL1ApiUrl = (): string => {
+  const envL1 = process.env.REACT_APP_L1_API_URL;
+  if (envL1) {
+    return envL1;
   }
-  
-  return 'http://localhost:3003'; // fallback to local
+
+  // Default L1 API for Ethereum mainnet data (used for legacy pixel ownership, etc.)
+  return 'https://api.ownthedoge.com';
 };
 
 // Build the configuration object
@@ -124,7 +141,7 @@ const config = {
   api: {
     baseURL: getServerUrl(),
     proxyURL: chainId === 1337 || chainId === 31337 ? getServerUrl() : null,
-    l1: 'https://api.ownthedoge.com', // L1 API (Ethereum mainnet data) - only used for testnet/prod
+    l1: getL1ApiUrl(),
   },
   app: {
     availableTokens: {

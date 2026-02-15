@@ -58,6 +58,14 @@ export interface Configuration {
   phSecret: string;
   dripKey: string;
   freeMoneyEnabled: boolean;
+  burnVerificationKey: string;
+  legacyContracts: {
+    v1: { address: string; chainId: number };
+    v2: { address: string; chainId: number };
+    v2Testnet: { chainId: number };
+  };
+  rpcRateLimitDelayMs: number;
+  rpcBlockRangeLimit: number;
 }
 
 export default () => ({
@@ -113,4 +121,25 @@ export default () => ({
   phSecret: process.env.PH_SECRET,
   dripKey: process.env.DRIP_KEY || '',
   freeMoneyEnabled: !!(process.env.DRIP_KEY && process.env.DRIP_KEY.trim()),
+  burnVerificationKey: process.env.BURN_VERIFICATION_KEY || '',
+  legacyContracts: {
+    v1: {
+      address: '0xBAac2B4491727D78D2b78815144570b9f2Fe8899',
+      chainId: 1,
+    },
+    v2: {
+      address: '0xAfb89a09D82FBDE58f18Ac6437B3fC81724e4dF6',
+      chainId: 8453,
+    },
+    // Base Sepolia testnet - loaded from abi.json in burn-verification service
+    v2Testnet: {
+      chainId: 84532,
+    },
+  },
+  // Alchemy free tier: 500 CUPs, eth_getLogs = 75 CUs = ~6 req/sec max
+  // Default 500ms = 2 req/sec to stay safely under limit with headroom for other requests
+  rpcRateLimitDelayMs: parseInt(process.env.RPC_RATE_LIMIT_DELAY_MS) || 500,
+  // Alchemy free tier limits eth_getLogs to 10 block range
+  // Paid plans can use larger ranges (e.g., 2000)
+  rpcBlockRangeLimit: parseInt(process.env.RPC_BLOCK_RANGE_LIMIT) || 10,
 });

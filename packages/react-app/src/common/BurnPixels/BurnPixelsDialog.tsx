@@ -67,6 +67,7 @@ const SelectPixels = observer(({ store }: { store: BurnPixelsModalStore }) => {
               <Typography variant={TVariant.PresStart15}>DOG</Typography>
               <Typography variant={TVariant.ComicSans18}>
                 {formatWithThousandsSeparators(store.selectedPixelsDogValue)}
+                <br/>(total minus 1% burn fee)
               </Typography>
             </Flex>
             {!store.isAllPixelsSelected && (

@@ -21,6 +21,8 @@ import { ENSService } from './ens/ens.service';
 import { BasenamesService } from './basenames/basenames.service';
 import { FreeMoneyService } from './free-money/free-money.service';
 import { ImageGeneratorService } from './image-generator/image-generator.service';
+import { MigrationService } from './migration/migration.service';
+import { BurnVerificationService } from './burn-verification/burn-verification.service';
 import { IndexController } from './index/index.controller';
 import { NetworkService } from './network/network.service';
 import { OwnTheDogeContractService } from './ownthedoge-contracts/ownthedoge-contracts.service';
@@ -47,15 +49,18 @@ import { SupportService } from './support/support.service';
       timeout: 5000,
     }),
     CacheModule.registerAsync({
-      useFactory: (config: ConfigService<Configuration>) => ({
-        store: redisStore,
-        url: config.get('redis').url,
-        ttl: 10,
-        max: 10000,
-        tls: {
-          rejectUnauthorized: false,
-        },
-      }),
+      useFactory: (config: ConfigService<Configuration>) => {
+        const redisUrl = config.get('redis').url;
+        const isLocalhost = redisUrl?.includes('localhost') || redisUrl?.includes('127.0.0.1');
+        return {
+          store: redisStore,
+          url: redisUrl,
+          ttl: 10,
+          max: 10000,
+          // Only use TLS for non-localhost (production) Redis
+          ...(isLocalhost ? {} : { tls: { rejectUnauthorized: false } }),
+        };
+      },
       inject: [ConfigService],
     }),
     ScheduleModule.forRoot(),
@@ -86,6 +91,8 @@ import { SupportService } from './support/support.service';
     NetworkService,
     EmailService,
     SupportService,
+    MigrationService,
+    BurnVerificationService,
   ],
 })
 export class AppModule {}
