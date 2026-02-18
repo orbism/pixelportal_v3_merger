@@ -50,18 +50,21 @@ export class OwnTheDogeContractService implements OnModuleInit {
 
   async onModuleInit() {
     if (!this.isConnectedToContracts && this.ethersService.provider) {
-      this.onProviderConnected(this.ethersService.provider);
+      this.onProviderConnected(this.ethersService.provider).catch((error) => {
+        this.logger.error(`onProviderConnected failed: ${error.message}`);
+      });
     }
   }
 
   @OnEvent(Events.ETHERS_WS_PROVIDER_CONNECTED)
   async handleProviderConnected(provider: WebSocketProvider) {
-    // Skip if already connected (onModuleInit may have already called this)
     if (this.isConnectedToContracts) {
       this.logger.log('Contracts already initialized, skipping duplicate event');
       return;
     }
-    this.onProviderConnected(provider);
+    this.onProviderConnected(provider).catch((error) => {
+      this.logger.error(`onProviderConnected failed: ${error.message}`);
+    });
   }
 
   get isConnectedToContracts() {
@@ -97,6 +100,12 @@ export class OwnTheDogeContractService implements OnModuleInit {
     } else {
       this.logger.log('Burn verification disabled - no BURN_VERIFICATION_KEY provided');
     }
+    // Prevent uncaught 'error' EventEmitter events from crashing the process.
+    // In Node.js, an EventEmitter 'error' event with no listener is fatal.
+    provider.on('error', (error) => {
+      this.logger.error(`WebSocket provider error: ${error.message}`);
+    });
+
     await this.connectToContracts(provider);
     this.initPixelListener();
     try {
@@ -278,8 +287,8 @@ export class OwnTheDogeContractService implements OnModuleInit {
     this.logger.log(
       `Getting pixel transfers from block: ${fromBlock} to block: ${toBlock}`,
     );
-    // Configurable block range (default 10 for Alchemy free tier)
-    const step = this.configService.get('rpcBlockRangeLimit') || 10;
+    // Configurable block range, capped at 10 (Alchemy free tier hard limit)
+    const step = Math.min(this.configService.get('rpcBlockRangeLimit') || 10, 10);
     // Configurable rate limit delay (default 500ms for Alchemy free tier)
     const delayMs = this.configService.get('rpcRateLimitDelayMs') || 500;
     const filter = this.pxContract.filters.Transfer(null, null);
