@@ -99,8 +99,16 @@ export class OwnTheDogeContractService implements OnModuleInit {
     }
     await this.connectToContracts(provider);
     this.initPixelListener();
-    await this.pixelTransferService.syncRecentTransfers();
-    await this.upsertDogCurrency();
+    try {
+      await this.pixelTransferService.syncRecentTransfers();
+    } catch (error) {
+      this.logger.error(`syncRecentTransfers failed, server will continue: ${error.message}`);
+    }
+    try {
+      await this.upsertDogCurrency();
+    } catch (error) {
+      this.logger.error(`upsertDogCurrency failed, server will continue: ${error.message}`);
+    }
   }
 
   private async fetchSymbol(contract: ethers.Contract) {
@@ -217,50 +225,35 @@ export class OwnTheDogeContractService implements OnModuleInit {
 
   private initPixelListener() {
     this.logger.log(`initPixelListener`);
-    this.logger.log(`Listening to pixel transfer events`);
+    this.logger.log(`Listening to pixel transfer events via block polling`);
 
-    this.pxContract.on('Transfer', async (from, to, tokenId, event) => {
-      this.logger.log(`new transfer event hit: (${tokenId}) ${from} -> ${to}`);
+    const filter = this.pxContract.filters.Transfer(null, null);
 
-      // this.logger.log(`got new event - details: ${stringify(event)}`);
-      //this.logger.log(`new event details: blockNumber=${event.blockNumber}, blockHash=${event.blockHash}, transactionHash=${event.transactionHash}, logIndex=${event.logIndex}`);
-      // console.log('Event Object Keys:', Object.keys(event));
-      // console.log('Event:', event);
-      // if (event.args) {
-      //     console.log('Event Args:', event.args);
-      // }
-
-      this.logger.log(
-        `got new event - details: ${JSON.stringify(
-          event,
-          (key, value) =>
-            typeof value === 'bigint' ? value.toString() : value,
-          2,
-        )}`,
-      );
-
-      // const blockNumber = event.log.blockNumber || (event.args && event.args.blockNumber);
-      const blockNumber = event.log.blockNumber;
-      if (!blockNumber) {
-        this.logger.error('Block number is undefined in the event object.');
-        return;
+    // Use provider.on('block') instead of contract.on('Transfer') to avoid
+    // ethers v6 WebSocketProvider issuing an unchunked historical eth_getLogs
+    // backfill on subscription setup, which exceeds Alchemy free tier limits.
+    this.ethersService.provider.on('block', async (blockNumber: number) => {
+      try {
+        const logs = await this.pxContract.queryFilter(filter, blockNumber, blockNumber);
+        for (const event of logs) {
+          const typedEvent = event as ethers.EventLog;
+          const [from, to, tokenId] = typedEvent.args;
+          this.logger.log(`new transfer event hit: (${tokenId}) ${from} -> ${to}`);
+          const blockCreatedAt =
+            await this.ethersService.getDateTimeFromBlockNumber(blockNumber);
+          const payload: PixelTransferEventPayload = {
+            from,
+            to,
+            tokenId: Number(tokenId),
+            blockNumber,
+            blockCreatedAt,
+            event: { ...typedEvent, blockNumber },
+          };
+          this.eventEmitter.emit(Events.PIXEL_TRANSFER, payload);
+        }
+      } catch (error) {
+        this.logger.error(`Error processing block ${blockNumber}: ${error.message}`);
       }
-      const blockCreatedAt =
-        await this.ethersService.getDateTimeFromBlockNumber(blockNumber);
-      const payload: PixelTransferEventPayload = {
-        from,
-        to,
-        tokenId: Number(tokenId),
-        blockNumber,
-        blockCreatedAt,
-        event: { ...event.log, blockNumber }, // blockNumber EXPLICITLY
-        // event: {
-        //   blockHash: event.blockHash,
-        //   transactionHash: event.transactionHash,
-        //   logIndex: event.logIndex,
-        // },
-      };
-      this.eventEmitter.emit(Events.PIXEL_TRANSFER, payload);
     });
   }
 
