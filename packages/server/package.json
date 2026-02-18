@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@nestjs/axios": "^3.0.0",
+    "@nestjs/cache-manager": "^1.0.0",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.0.0",
     "@nestjs/core": "^10.0.0",
@@ -60,7 +61,7 @@
     "rimraf": "^3.0.2",
     "rxjs": "^7.2.0",
     "twitter": "^1.7.1",
-    "viem": "^2.20.1",
+    "viem": "^2.19.0",
     "ws": "^8.12.0"
   },
   "devDependencies": {

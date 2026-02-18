@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   Body,
-  CACHE_MANAGER,
   Controller,
   Get,
   Inject,
@@ -10,6 +9,7 @@ import {
   Post,
   Render,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { ConfigService } from '@nestjs/config';
 import { Cache } from 'cache-manager';
 import { ethers } from 'ethers';
