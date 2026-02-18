@@ -1,0 +1,3 @@
+[[build.env]]
+name = "PROJECT_PATH"
+value = "packages/server"
