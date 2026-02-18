@@ -117,11 +117,11 @@ class BurnPixelsDialogStore extends Navigable<BurnPixelsModalView, Constructor>(
 
   @computed
   get selectedPixelsDogValue() {
-    const dogReturnedWithoutFees = Number(
-      ethers.utils.formatEther(AppStore.web3.DOG_TO_PIXEL_SATOSHIS.mul(this.selectedPixels.length)),
-    );
-    const dogFees = dogReturnedWithoutFees * (AppStore.web3.DOG_BURN_FEES_PERCENT / 100);
-    return (dogReturnedWithoutFees - dogFees).toFixed(4);
+    if (this.selectedPixels.length === 0) {
+      return "0";
+    }
+    const dogPerPixel = 55240;
+    return (dogPerPixel * this.selectedPixels.length).toString();
   }
 
   @computed

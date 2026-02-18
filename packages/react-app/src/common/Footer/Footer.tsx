@@ -54,7 +54,7 @@ const Footer = observer(() => {
       <Flex justifyContent={"space-between"} alignItems={"center"} mt={5}>
         <Box>
           <Button size="xs" onClick={() => AppStore.guide.startGuide()}>
-            Site Guide
+            Run Interactive User Guide
           </Button>
         </Box>
         <HStack justifyContent={"flex-end"} alignItems={"center"} spacing={2} opacity={0.5}>

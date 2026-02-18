@@ -64,7 +64,7 @@ const Modals: React.FC<{ store: ViewerStore }> = observer(({ store }) => {
       )}
       {AppStore.modals.isBurnModalOpen && (
         <BurnPixelsModal
-          defaultPixel={store.selectedPupper}
+          defaultPixel={null}
           isOpen={AppStore.modals.isBurnModalOpen}
           onClose={() => (AppStore.modals.isBurnModalOpen = false)}
           onSuccess={burnedPixelIDs => {

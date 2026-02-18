@@ -9,6 +9,8 @@ import { lightOrDarkMode } from "../../DSL/Theme";
 import Typography, { TVariant } from "../../DSL/Typography/Typography";
 import { Type } from "../../DSL/Fonts/Fonts";
 import Link from "../../DSL/Link/Link";
+import Button from "../../DSL/Button/Button";
+import AppStore from "../../store/App.store";
 import { readLinks, socialLinks, dooLinks, tradeLinks } from "./Links";
 import dogeface from '../../images/dogeface.png';
 
@@ -78,6 +80,11 @@ const FooterDrawer = observer(() => {
                   <FooterItem title={"Do"} items={dooLinks} />
                   <FooterItem title={"$DOG"} items={tradeLinks} />
                 </Grid>
+              </Box>
+              <Box pt={4} pb={2}>
+                <Button size="xs" onClick={() => { AppStore.guide.startGuide(); setIsOpen(false); }}>
+                  Run Interactive User Guide
+                </Button>
               </Box>
             </Box>
           </MotionBox>

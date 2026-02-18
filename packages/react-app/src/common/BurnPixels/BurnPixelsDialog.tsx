@@ -64,10 +64,9 @@ const SelectPixels = observer(({ store }: { store: BurnPixelsModalStore }) => {
           </Flex>
           <Flex justifyContent={"space-between"} alignItems={"flex-start"} mt={6}>
             <Flex flexDirection={"column"}>
-              <Typography variant={TVariant.PresStart15}>DOG</Typography>
-              <Typography variant={TVariant.ComicSans18}>
+              <Typography variant={TVariant.PresStart15}>$DOG</Typography>
+              <Typography variant={TVariant.ComicSans18} fontWeight={"bold"}>
                 {formatWithThousandsSeparators(store.selectedPixelsDogValue)}
-                <br/>(total minus 1% burn fee)
               </Typography>
             </Flex>
             {!store.isAllPixelsSelected && (

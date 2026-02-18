@@ -1,5 +1,6 @@
 import { Box, Flex, useColorMode } from "@chakra-ui/react";
-import Icon from "../../DSL/Icon/Icon";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faArrowRight } from "@fortawesome/free-solid-svg-icons";
 import { lightOrDarkMode } from "../../DSL/Theme";
 import Typography, { TVariant } from "../../DSL/Typography/Typography";
 
@@ -26,19 +27,24 @@ const GuideModal: React.FC<GuideModalProps> = ({ content, position, onClose }) =
       pointerEvents="auto"
       boxShadow="0 4px 12px rgba(0, 0, 0, 0.3)"
     >
-      <Flex justifyContent="flex-end" mb={2}>
-        <Box
+      <Typography variant={TVariant.ComicSans16} color={lightOrDarkMode(colorMode, "black", "white")}>
+        {content}
+      </Typography>
+      <Flex justifyContent="flex-end" mt={4}>
+        <Flex
+          alignItems="center"
+          gap={2}
           cursor="pointer"
           onClick={onClose}
           _hover={{ opacity: 0.7 }}
           color={lightOrDarkMode(colorMode, "black", "white")}
         >
-          <Icon icon="close" boxSize={5} />
-        </Box>
+          <Typography variant={TVariant.PresStart10} color={lightOrDarkMode(colorMode, "black", "white")}>
+            Next
+          </Typography>
+          <FontAwesomeIcon icon={faArrowRight} size="sm" />
+        </Flex>
       </Flex>
-      <Typography variant={TVariant.ComicSans16} color={lightOrDarkMode(colorMode, "black", "white")}>
-        {content}
-      </Typography>
     </Box>
   );
 };
