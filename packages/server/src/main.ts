@@ -1,3 +1,17 @@
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught exception:', err);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] Unhandled rejection:', reason);
+  process.exit(1);
+});
+
+console.log('[BOOT] Process started, loading modules...');
+console.log(`[BOOT] APP_ENV=${process.env.APP_ENV} | NODE_ENV=${process.env.NODE_ENV} | PORT=${process.env.PORT}`);
+console.log(`[BOOT] CB_WS_ENDPOINT=${process.env.CB_WS_ENDPOINT ? process.env.CB_WS_ENDPOINT.substring(0, 40) + '...' : 'NOT SET'}`);
+console.log(`[BOOT] DATABASE_URL=${process.env.DATABASE_URL ? 'SET' : 'NOT SET'} | REDIS_URL=${process.env.REDIS_URL ? 'SET' : 'NOT SET'}`);
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -45,4 +59,7 @@ async function bootstrap() {
   );
   await app.listen(app.get(ConfigService).get('PORT'));
 }
-bootstrap();
+bootstrap().catch((err) => {
+  console.error('[FATAL] Bootstrap failed:', err);
+  process.exit(1);
+});

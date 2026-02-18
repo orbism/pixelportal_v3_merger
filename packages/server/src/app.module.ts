@@ -52,13 +52,19 @@ import { SupportService } from './support/support.service';
     CacheModule.registerAsync({
       useFactory: async (config: ConfigService<Configuration>) => {
         const redisUrl = config.get('redis').url;
-        const isLocalhost = redisUrl?.includes('localhost') || redisUrl?.includes('127.0.0.1');
-        const store = await redisStore({
-          url: redisUrl,
-          ttl: 10000,
-          ...(isLocalhost ? {} : { socket: { tls: true, rejectUnauthorized: false } }),
-        });
-        return { store, ttl: 10000, max: 10000 };
+        const isLocalhost = !redisUrl || redisUrl.includes('localhost') || redisUrl.includes('127.0.0.1');
+        try {
+          const store = await redisStore({
+            url: redisUrl,
+            ttl: 10000,
+            ...(isLocalhost ? {} : { socket: { tls: true, rejectUnauthorized: false } }),
+          });
+          console.log('[CacheModule] Redis store initialized successfully');
+          return { store, ttl: 10000, max: 10000 };
+        } catch (err) {
+          console.warn(`[CacheModule] Redis unavailable (${err.message}), falling back to in-memory cache`);
+          return { ttl: 10000, max: 10000 };
+        }
       },
       inject: [ConfigService],
     }),
