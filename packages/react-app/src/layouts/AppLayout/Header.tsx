@@ -16,11 +16,25 @@ import { ModalType } from "../../store/Modals.store";
 const Header = observer(() => {
   const history = useHistory();
   const location = useLocation();
-  const onLogoClick = useBreakpointValue({
-    base: () => AppStore.rwd.toggleMobileNav(),
-    xl: () => history.push(route(NamedRoutes.VIEWER)),
-  });
   const { colorMode } = useColorMode();
+  const isGuideModeActive = AppStore.guide.isGuideActive;
+  
+  const onLogoClick = useBreakpointValue({
+    base: () => {
+      if (isGuideModeActive) {
+        AppStore.guide.skipGuide();
+      } else {
+        AppStore.rwd.toggleMobileNav();
+      }
+    },
+    xl: () => {
+      if (isGuideModeActive) {
+        AppStore.guide.skipGuide();
+      } else {
+        history.push(route(NamedRoutes.VIEWER));
+      }
+    },
+  });
 
   const handleMintClick = () => {
     if (location.pathname !== "/" && !location.pathname.includes("/px")) {
@@ -46,10 +60,11 @@ const Header = observer(() => {
       <Flex mb={{ base: 0, md: 6 }}>
         <Flex alignItems={"center"} w={"full"} gap={6} position={"relative"}>
           <Box
+            data-guide-target="logo"
             top={{ base: 2, md: 0 }}
             left={{ base: 2, md: 0 }}
             bg={lightOrDarkMode(colorMode, "yellow.50", darkModeGradient)}
-            zIndex={10}
+            zIndex={10010}
             position={{ base: "absolute", md: "relative" }}
             _hover={{
               cursor: "pointer",
@@ -76,6 +91,7 @@ const Header = observer(() => {
                   bg={lightOrDarkMode(colorMode, "yellow.50", "purple.700")}
                   rounded={"full"}
                   opacity={0.85}
+                  data-guide-target="menu-button"
                 />
                 <Flex
                   justifyContent={"center"}
@@ -85,13 +101,14 @@ const Header = observer(() => {
                   top={0}
                   w={"full"}
                   h={"full"}
+                  data-guide-target="menu-button"
                 >
                   <GiHamburgerMenu color={lightOrDarkMode(colorMode, "black", "white")} size={24} />
                 </Flex>
               </>
             )}
           </Box>
-          <Flex gap={6} display={{ base: "none", xl: "flex" }}>
+          <Flex gap={6} display={{ base: "none", xl: "flex" }} data-guide-target="menu-button">
             <NavLinks
               onClick={() => {
                 if (AppStore.rwd.isMobileNavOpen) {
@@ -104,26 +121,38 @@ const Header = observer(() => {
         <Flex>
           <Box display={{ base: "none", md: "flex" }} alignItems={"center"} justifyContent={"flex-end"} w={"full"}>
             <Flex mr={8} alignItems={"center"}>
-              {AppStore.web3?.address && (
+              {(AppStore.web3?.address || isGuideModeActive) && (
                 <Flex alignItems={"center"}>
-                  {/* <Button
+                  <Box data-guide-target="mint-button">
+                    <Button
+                      size="sm"
+                      mr={8}
+                      onClick={handleMintClick}
+                      isDisabled={isGuideModeActive && !AppStore.web3?.address}
+                    >
+                      Mint
+                    </Button>
+                  </Box>
+
+                  {(AppStore.web3.puppersOwned.length > 0 || isGuideModeActive) && (
+                    <Box data-guide-target="burn-button">
+                      <Button
                     size="sm"
                     mr={8}
                     onClick={() => {
                       if (location.pathname !== "/" && !location.pathname.includes("/px")) {
                         history.push("/");
                       }
-                      AppStore.modals.openModal(ModalType.Mint);)
-                    }}
-                  >
-                    Mint
-                  </Button> */}
-
-                  <Button size="sm" mr={8} onClick={handleMintClick}>
-                    Mint
+                          AppStore.modals.openModal(ModalType.Burn);
+                        }}
+                        isDisabled={isGuideModeActive && AppStore.web3.puppersOwned.length === 0}
+                      >
+                        Burn
                   </Button>
+                    </Box>
+                  )}
 
-                  {AppStore.web3.puppersOwned.length > 0 && (
+                  <Box data-guide-target="claim-button">
                     <Button
                       size="sm"
                       mr={8}
@@ -131,25 +160,13 @@ const Header = observer(() => {
                         if (location.pathname !== "/" && !location.pathname.includes("/px")) {
                           history.push("/");
                         }
-                        AppStore.modals.openModal(ModalType.Burn);
+                        AppStore.modals.openModal(ModalType.Claim);
                       }}
+                      isDisabled={isGuideModeActive && !AppStore.web3?.address}
                     >
-                      Burn
+                      Claim
                     </Button>
-                  )}
-
-                  <Button
-                    size="sm"
-                    mr={8}
-                    onClick={() => {
-                      if (location.pathname !== "/" && !location.pathname.includes("/px")) {
-                        history.push("/");
-                      }
-                      AppStore.modals.openModal(ModalType.Claim);
-                    }}
-                  >
-                    Claim
-                  </Button>
+                  </Box>
                 </Flex>
               )}
               <Box>
@@ -157,7 +174,9 @@ const Header = observer(() => {
               </Box>
             </Flex>
 
+            <Box data-guide-target="wallet-button">
             <ConnectWalletButton />
+            </Box>
           </Box>
         </Flex>
       </Flex>

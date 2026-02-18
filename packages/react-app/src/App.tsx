@@ -66,6 +66,17 @@ AppStore.init();
 const App = observer(() => {
   useEffect(logAppVersionToConsole, []);
   useWeb3WagmiSync();
+
+  useEffect(() => {
+    // Auto-start guide for first-time visitors
+    if (!AppStore.guide.hasSeenGuide) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        AppStore.guide.startGuide();
+      }, 500);
+    }
+  }, []);
+
   return (
     <>
       <Box position={"absolute"} left={0} w={"full"}>

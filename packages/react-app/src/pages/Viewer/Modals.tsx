@@ -21,6 +21,7 @@ const Modals: React.FC<{ store: ViewerStore }> = observer(({ store }) => {
           title={"Own The Doge"}
           onClose={() => AppStore.modals.toggleInfoModal()}
           isOpen={AppStore.modals.isInfoModalOpen}
+          name="info-modal"
         >
           <Box display={"flex"} flexDirection={"column"} justifyContent={"space-between"}>
             <IndexPane store={store} />

@@ -5,6 +5,7 @@ import Link from "../../DSL/Link/Link";
 import { lightOrDarkMode } from "../../DSL/Theme";
 import Typography, { TVariant } from "../../DSL/Typography/Typography";
 import { readLinks, socialLinks, dooLinks, tradeLinks } from "./Links";
+import Button from "../../DSL/Button/Button";
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faXTwitter, faDiscord, faTiktok, faInstagram, faYoutube, faTelegram } from '@fortawesome/free-brands-svg-icons';
@@ -50,7 +51,12 @@ const Footer = observer(() => {
           )}
         </HStack>
       </Flex> */}
-      <Flex justifyContent={"flex-end"} alignItems={"center"} mt={5}>
+      <Flex justifyContent={"space-between"} alignItems={"center"} mt={5}>
+        <Box>
+          <Button size="xs" onClick={() => AppStore.guide.startGuide()}>
+            Site Guide
+          </Button>
+        </Box>
         <HStack justifyContent={"flex-end"} alignItems={"center"} spacing={2} opacity={0.5}>
           <a
             target={"_blank"}
