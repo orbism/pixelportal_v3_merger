@@ -5,7 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
-import * as redisStore from 'cache-manager-redis-store';
+import { redisStore } from 'cache-manager-redis-yet';
 import { join } from 'path';
 import { AlchemyService } from './alchemy/alchemy.service';
 import { AppController } from './app.controller';
@@ -50,17 +50,15 @@ import { SupportService } from './support/support.service';
       timeout: 5000,
     }),
     CacheModule.registerAsync({
-      useFactory: (config: ConfigService<Configuration>) => {
+      useFactory: async (config: ConfigService<Configuration>) => {
         const redisUrl = config.get('redis').url;
         const isLocalhost = redisUrl?.includes('localhost') || redisUrl?.includes('127.0.0.1');
-        return {
-          store: redisStore,
+        const store = await redisStore({
           url: redisUrl,
-          ttl: 10,
-          max: 10000,
-          // Only use TLS for non-localhost (production) Redis
-          ...(isLocalhost ? {} : { tls: { rejectUnauthorized: false } }),
-        };
+          ttl: 10000,
+          ...(isLocalhost ? {} : { socket: { tls: true, rejectUnauthorized: false } }),
+        });
+        return { store, ttl: 10000, max: 10000 };
       },
       inject: [ConfigService],
     }),
