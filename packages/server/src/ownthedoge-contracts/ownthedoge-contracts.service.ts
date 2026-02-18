@@ -256,7 +256,7 @@ export class OwnTheDogeContractService implements OnModuleInit {
             tokenId: Number(tokenId),
             blockNumber,
             blockCreatedAt,
-            event: { ...typedEvent, blockNumber },
+            event: typedEvent,
           };
           this.eventEmitter.emit(Events.PIXEL_TRANSFER, payload);
         }
