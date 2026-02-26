@@ -27,6 +27,19 @@
             },
             {
               "type": "function",
+              "name": "BURN_FLAG_MANAGER_ROLE",
+              "inputs": [],
+              "outputs": [
+                {
+                  "name": "",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                }
+              ],
+              "stateMutability": "view"
+            },
+            {
+              "type": "function",
               "name": "DEFAULT_ADMIN_ROLE",
               "inputs": [],
               "outputs": [
@@ -121,42 +134,42 @@
               "name": "__PX_init",
               "inputs": [
                 {
-                  "name": "name_",
+                  "name": "",
                   "type": "string",
                   "internalType": "string"
                 },
                 {
-                  "name": "symbol_",
+                  "name": "",
                   "type": "string",
                   "internalType": "string"
                 },
                 {
-                  "name": "DOG20Address",
+                  "name": "",
                   "type": "address",
                   "internalType": "address"
                 },
                 {
-                  "name": "ipfsUri_",
+                  "name": "",
                   "type": "string",
                   "internalType": "string"
                 },
                 {
-                  "name": "width_",
+                  "name": "",
                   "type": "uint256",
                   "internalType": "uint256"
                 },
                 {
-                  "name": "height_",
+                  "name": "",
                   "type": "uint256",
                   "internalType": "uint256"
                 },
                 {
-                  "name": "DOG20_FEES_ADDRESS_DEV_",
+                  "name": "",
                   "type": "address",
                   "internalType": "address"
                 },
                 {
-                  "name": "owner_",
+                  "name": "",
                   "type": "address",
                   "internalType": "address"
                 }
@@ -246,6 +259,11 @@
                   "name": "tokenId",
                   "type": "uint256",
                   "internalType": "uint256"
+                },
+                {
+                  "name": "tokenAddress",
+                  "type": "address",
+                  "internalType": "address"
                 }
               ],
               "outputs": [],
@@ -253,12 +271,12 @@
             },
             {
               "type": "function",
-              "name": "claimReservedToken",
+              "name": "claimReservedTokensBatch",
               "inputs": [
                 {
-                  "name": "tokenId",
-                  "type": "uint256",
-                  "internalType": "uint256"
+                  "name": "tokenIds",
+                  "type": "uint256[]",
+                  "internalType": "uint256[]"
                 },
                 {
                   "name": "tokenAddress",
@@ -335,9 +353,9 @@
                   "internalType": "address"
                 },
                 {
-                  "name": "limit",
-                  "type": "uint256",
-                  "internalType": "uint256"
+                  "name": "tokenIdsToCheck",
+                  "type": "uint256[]",
+                  "internalType": "uint256[]"
                 }
               ],
               "outputs": [
@@ -444,7 +462,7 @@
               "name": "isReserved",
               "inputs": [
                 {
-                  "name": "",
+                  "name": "tokenId",
                   "type": "uint256",
                   "internalType": "uint256"
                 }
@@ -475,6 +493,19 @@
               ],
               "outputs": [],
               "stateMutability": "nonpayable"
+            },
+            {
+              "type": "function",
+              "name": "mintingStarted",
+              "inputs": [],
+              "outputs": [
+                {
+                  "name": "",
+                  "type": "bool",
+                  "internalType": "bool"
+                }
+              ],
+              "stateMutability": "view"
             },
             {
               "type": "function",
@@ -582,7 +613,7 @@
                   "internalType": "uint256"
                 }
               ],
-              "stateMutability": "view"
+              "stateMutability": "pure"
             },
             {
               "type": "function",
@@ -778,6 +809,19 @@
             },
             {
               "type": "function",
+              "name": "setBaseUri",
+              "inputs": [
+                {
+                  "name": "newBaseUri",
+                  "type": "string",
+                  "internalType": "string"
+                }
+              ],
+              "outputs": [],
+              "stateMutability": "nonpayable"
+            },
+            {
+              "type": "function",
               "name": "setBurnFlags",
               "inputs": [
                 {
@@ -809,6 +853,13 @@
                   "internalType": "uint256"
                 }
               ],
+              "outputs": [],
+              "stateMutability": "nonpayable"
+            },
+            {
+              "type": "function",
+              "name": "startMinting",
+              "inputs": [],
               "outputs": [],
               "stateMutability": "nonpayable"
             },
@@ -957,6 +1008,19 @@
               "stateMutability": "payable"
             },
             {
+              "type": "function",
+              "name": "upgradeVersion",
+              "inputs": [],
+              "outputs": [
+                {
+                  "name": "",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                }
+              ],
+              "stateMutability": "pure"
+            },
+            {
               "type": "event",
               "name": "Approval",
               "inputs": [
@@ -1002,6 +1066,19 @@
                   "type": "bool",
                   "indexed": false,
                   "internalType": "bool"
+                }
+              ],
+              "anonymous": false
+            },
+            {
+              "type": "event",
+              "name": "BaseUriSet",
+              "inputs": [
+                {
+                  "name": "newBaseUri",
+                  "type": "string",
+                  "indexed": false,
+                  "internalType": "string"
                 }
               ],
               "anonymous": false
@@ -1061,6 +1138,12 @@
                   "internalType": "uint256"
                 }
               ],
+              "anonymous": false
+            },
+            {
+              "type": "event",
+              "name": "MintingStarted",
+              "inputs": [],
               "anonymous": false
             },
             {
@@ -1343,17 +1426,6 @@
             },
             {
               "type": "error",
-              "name": "AddressInsufficientBalance",
-              "inputs": [
-                {
-                  "name": "account",
-                  "type": "address",
-                  "internalType": "address"
-                }
-              ]
-            },
-            {
-              "type": "error",
               "name": "ArraysLengthMismatch",
               "inputs": []
             },
@@ -1370,16 +1442,6 @@
             {
               "type": "error",
               "name": "CannotExceedTotalSupply",
-              "inputs": []
-            },
-            {
-              "type": "error",
-              "name": "DOG20NotConfiguredForLocking",
-              "inputs": []
-            },
-            {
-              "type": "error",
-              "name": "DOG20NotSet",
               "inputs": []
             },
             {
@@ -1485,17 +1547,12 @@
             },
             {
               "type": "error",
-              "name": "FailedInnerCall",
+              "name": "FailedCall",
               "inputs": []
             },
             {
               "type": "error",
               "name": "InvalidInitialization",
-              "inputs": []
-            },
-            {
-              "type": "error",
-              "name": "InvalidLimit",
               "inputs": []
             },
             {
@@ -1516,6 +1573,16 @@
             {
               "type": "error",
               "name": "InvalidTokenID",
+              "inputs": []
+            },
+            {
+              "type": "error",
+              "name": "MintingAlreadyStarted",
+              "inputs": []
+            },
+            {
+              "type": "error",
+              "name": "MintingNotStarted",
               "inputs": []
             },
             {
@@ -2065,6 +2132,19 @@
             },
             {
               "type": "function",
+              "name": "BURN_FLAG_MANAGER_ROLE",
+              "inputs": [],
+              "outputs": [
+                {
+                  "name": "",
+                  "type": "bytes32",
+                  "internalType": "bytes32"
+                }
+              ],
+              "stateMutability": "view"
+            },
+            {
+              "type": "function",
               "name": "DEFAULT_ADMIN_ROLE",
               "inputs": [],
               "outputs": [
@@ -2159,42 +2239,42 @@
               "name": "__PX_init",
               "inputs": [
                 {
-                  "name": "name_",
+                  "name": "",
                   "type": "string",
                   "internalType": "string"
                 },
                 {
-                  "name": "symbol_",
+                  "name": "",
                   "type": "string",
                   "internalType": "string"
                 },
                 {
-                  "name": "DOG20Address",
+                  "name": "",
                   "type": "address",
                   "internalType": "address"
                 },
                 {
-                  "name": "ipfsUri_",
+                  "name": "",
                   "type": "string",
                   "internalType": "string"
                 },
                 {
-                  "name": "width_",
+                  "name": "",
                   "type": "uint256",
                   "internalType": "uint256"
                 },
                 {
-                  "name": "height_",
+                  "name": "",
                   "type": "uint256",
                   "internalType": "uint256"
                 },
                 {
-                  "name": "DOG20_FEES_ADDRESS_DEV_",
+                  "name": "",
                   "type": "address",
                   "internalType": "address"
                 },
                 {
-                  "name": "owner_",
+                  "name": "",
                   "type": "address",
                   "internalType": "address"
                 }
@@ -2284,6 +2364,11 @@
                   "name": "tokenId",
                   "type": "uint256",
                   "internalType": "uint256"
+                },
+                {
+                  "name": "tokenAddress",
+                  "type": "address",
+                  "internalType": "address"
                 }
               ],
               "outputs": [],
@@ -2291,12 +2376,12 @@
             },
             {
               "type": "function",
-              "name": "claimReservedToken",
+              "name": "claimReservedTokensBatch",
               "inputs": [
                 {
-                  "name": "tokenId",
-                  "type": "uint256",
-                  "internalType": "uint256"
+                  "name": "tokenIds",
+                  "type": "uint256[]",
+                  "internalType": "uint256[]"
                 },
                 {
                   "name": "tokenAddress",
@@ -2482,7 +2567,7 @@
               "name": "isReserved",
               "inputs": [
                 {
-                  "name": "",
+                  "name": "tokenId",
                   "type": "uint256",
                   "internalType": "uint256"
                 }
@@ -2513,6 +2598,19 @@
               ],
               "outputs": [],
               "stateMutability": "nonpayable"
+            },
+            {
+              "type": "function",
+              "name": "mintingStarted",
+              "inputs": [],
+              "outputs": [
+                {
+                  "name": "",
+                  "type": "bool",
+                  "internalType": "bool"
+                }
+              ],
+              "stateMutability": "view"
             },
             {
               "type": "function",
@@ -2620,7 +2718,7 @@
                   "internalType": "uint256"
                 }
               ],
-              "stateMutability": "view"
+              "stateMutability": "pure"
             },
             {
               "type": "function",
@@ -2816,6 +2914,19 @@
             },
             {
               "type": "function",
+              "name": "setBaseUri",
+              "inputs": [
+                {
+                  "name": "newBaseUri",
+                  "type": "string",
+                  "internalType": "string"
+                }
+              ],
+              "outputs": [],
+              "stateMutability": "nonpayable"
+            },
+            {
+              "type": "function",
               "name": "setBurnFlags",
               "inputs": [
                 {
@@ -2847,6 +2958,13 @@
                   "internalType": "uint256"
                 }
               ],
+              "outputs": [],
+              "stateMutability": "nonpayable"
+            },
+            {
+              "type": "function",
+              "name": "startMinting",
+              "inputs": [],
               "outputs": [],
               "stateMutability": "nonpayable"
             },
@@ -2995,6 +3113,19 @@
               "stateMutability": "payable"
             },
             {
+              "type": "function",
+              "name": "upgradeVersion",
+              "inputs": [],
+              "outputs": [
+                {
+                  "name": "",
+                  "type": "uint256",
+                  "internalType": "uint256"
+                }
+              ],
+              "stateMutability": "pure"
+            },
+            {
               "type": "event",
               "name": "Approval",
               "inputs": [
@@ -3040,6 +3171,19 @@
                   "type": "bool",
                   "indexed": false,
                   "internalType": "bool"
+                }
+              ],
+              "anonymous": false
+            },
+            {
+              "type": "event",
+              "name": "BaseUriSet",
+              "inputs": [
+                {
+                  "name": "newBaseUri",
+                  "type": "string",
+                  "indexed": false,
+                  "internalType": "string"
                 }
               ],
               "anonymous": false
@@ -3099,6 +3243,12 @@
                   "internalType": "uint256"
                 }
               ],
+              "anonymous": false
+            },
+            {
+              "type": "event",
+              "name": "MintingStarted",
+              "inputs": [],
               "anonymous": false
             },
             {
@@ -3381,17 +3531,6 @@
             },
             {
               "type": "error",
-              "name": "AddressInsufficientBalance",
-              "inputs": [
-                {
-                  "name": "account",
-                  "type": "address",
-                  "internalType": "address"
-                }
-              ]
-            },
-            {
-              "type": "error",
               "name": "ArraysLengthMismatch",
               "inputs": []
             },
@@ -3408,16 +3547,6 @@
             {
               "type": "error",
               "name": "CannotExceedTotalSupply",
-              "inputs": []
-            },
-            {
-              "type": "error",
-              "name": "DOG20NotConfiguredForLocking",
-              "inputs": []
-            },
-            {
-              "type": "error",
-              "name": "DOG20NotSet",
               "inputs": []
             },
             {
@@ -3523,17 +3652,12 @@
             },
             {
               "type": "error",
-              "name": "FailedInnerCall",
+              "name": "FailedCall",
               "inputs": []
             },
             {
               "type": "error",
               "name": "InvalidInitialization",
-              "inputs": []
-            },
-            {
-              "type": "error",
-              "name": "InvalidLimit",
               "inputs": []
             },
             {
@@ -3554,6 +3678,16 @@
             {
               "type": "error",
               "name": "InvalidTokenID",
+              "inputs": []
+            },
+            {
+              "type": "error",
+              "name": "MintingAlreadyStarted",
+              "inputs": []
+            },
+            {
+              "type": "error",
+              "name": "MintingNotStarted",
               "inputs": []
             },
             {
