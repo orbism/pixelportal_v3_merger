@@ -728,7 +728,11 @@ class Web3Store extends Reactionable(Web3providerStore) {
   async getMigrationEligibility(address: string): Promise<{ mainnet: number[]; base: number[] }> {
     try {
       const response = await Http.get(`/v1/migration/eligible/${address}`);
-      return response.data;
+      const data = response.data;
+      return {
+        mainnet: data.mainnet || [],
+        base: [...(data.base || []), ...(data['base-sepolia'] || [])],
+      };
     } catch (error) {
       console.error("Failed to fetch migration eligibility:", error);
       // Return empty if endpoint not available yet
