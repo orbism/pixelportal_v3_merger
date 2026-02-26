@@ -470,7 +470,9 @@ class ClaimPixelsDialogStore extends Reactionable(
       showSuccessToast(`Successfully burned ${tokenIds.length} pixels on ${network === "mainnet" ? "Ethereum" : "Base"}`);
 
       // Fire-and-forget fast-path verification so polling finds it sooner
-      const serverNetwork = (network === "base" && AppStore.web3.isTestnet) ? "base-sepolia" : network;
+      const serverNetwork = AppStore.web3.isTestnet
+        ? (network === "mainnet" ? "sepolia" : "base-sepolia")
+        : network;
       log("Firing fast-path verify-burns for network:", serverNetwork);
       Http.post("/v1/migration/verify-burns", {
         tokenIds,

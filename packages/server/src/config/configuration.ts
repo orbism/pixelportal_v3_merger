@@ -61,6 +61,7 @@ export interface Configuration {
   burnVerificationKey: string;
   legacyContracts: {
     v1: { address: string; chainId: number };
+    v1Testnet: { address: string; chainId: number };
     v2: { address: string; chainId: number };
     v2Testnet: { chainId: number };
   };
@@ -127,6 +128,10 @@ export default () => ({
     v1: {
       address: '0xBAac2B4491727D78D2b78815144570b9f2Fe8899',
       chainId: 1,
+    },
+    v1Testnet: {
+      address: '0x8ad55a76dF77EE8Ec30F598D1f30C7e5c73F11FF',
+      chainId: 11155111,
     },
     v2: {
       address: '0xAfb89a09D82FBDE58f18Ac6437B3fC81724e4dF6',

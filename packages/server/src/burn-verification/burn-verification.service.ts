@@ -23,9 +23,11 @@ export class BurnVerificationService implements OnModuleInit {
   private readonly logger = new Logger(BurnVerificationService.name);
 
   private ethereumProvider: JsonRpcProvider | null = null;
+  private sepoliaProvider: JsonRpcProvider | null = null;
   private baseProvider: JsonRpcProvider | null = null;
   private baseSepoliaProvider: JsonRpcProvider | null = null;
   private v1Contract: Contract | null = null;
+  private v1TestnetContract: Contract | null = null;
   private v2Contract: Contract | null = null;
   private v2TestnetContract: Contract | null = null;
 
@@ -60,6 +62,20 @@ export class BurnVerificationService implements OnModuleInit {
       this.logger.log('Ethereum mainnet provider initialized for V1 burn verification');
     } catch (error) {
       this.logger.error('Failed to initialize Ethereum provider:', error);
+    }
+
+    // Initialize Ethereum Sepolia provider for V1 testnet burn checks
+    try {
+      const sepoliaRpc = `https://eth-sepolia.g.alchemy.com/v2/${alchemyKey}`;
+      this.sepoliaProvider = new JsonRpcProvider(sepoliaRpc);
+      this.v1TestnetContract = new Contract(
+        legacyContracts.v1Testnet.address,
+        LEGACY_PX_ABI,
+        this.sepoliaProvider,
+      );
+      this.logger.log('Ethereum Sepolia provider initialized for V1 testnet burn verification');
+    } catch (error) {
+      this.logger.error('Failed to initialize Ethereum Sepolia provider:', error);
     }
 
     // Initialize Base mainnet provider for V2 burn checks
@@ -98,10 +114,12 @@ export class BurnVerificationService implements OnModuleInit {
   /**
    * Get the contract for a given network
    */
-  private getContractForNetwork(network: 'mainnet' | 'base' | 'base-sepolia'): Contract | null {
+  private getContractForNetwork(network: 'mainnet' | 'sepolia' | 'base' | 'base-sepolia'): Contract | null {
     switch (network) {
       case 'mainnet':
         return this.v1Contract;
+      case 'sepolia':
+        return this.v1TestnetContract;
       case 'base':
         return this.v2Contract;
       case 'base-sepolia':
@@ -115,7 +133,7 @@ export class BurnVerificationService implements OnModuleInit {
    * Check if a token is burned on the legacy contract
    * A token is considered burned if ownerOf() reverts
    */
-  async isTokenBurned(tokenId: number, network: 'mainnet' | 'base' | 'base-sepolia'): Promise<boolean> {
+  async isTokenBurned(tokenId: number, network: 'mainnet' | 'sepolia' | 'base' | 'base-sepolia'): Promise<boolean> {
     const contract = this.getContractForNetwork(network);
 
     if (!contract) {
@@ -137,7 +155,7 @@ export class BurnVerificationService implements OnModuleInit {
    */
   async verifyAndSetBurnFlags(
     tokenIds: number[],
-    network: 'mainnet' | 'base' | 'base-sepolia',
+    network: 'mainnet' | 'sepolia' | 'base' | 'base-sepolia',
   ): Promise<VerifyBurnsResult> {
     const results: TokenResult[] = [];
     const burnedTokenIds: number[] = [];
@@ -230,12 +248,13 @@ export class BurnVerificationService implements OnModuleInit {
    * Called by the cron sweep endpoint.
    */
   async sweepUnconfirmedBurns(): Promise<{
-    results: { mainnet: VerifyBurnsResult | null; base: VerifyBurnsResult | null; 'base-sepolia': VerifyBurnsResult | null };
-    summary: { mainnet: number; base: number; 'base-sepolia': number; total: number };
+    results: { mainnet: VerifyBurnsResult | null; sepolia: VerifyBurnsResult | null; base: VerifyBurnsResult | null; 'base-sepolia': VerifyBurnsResult | null };
+    summary: { mainnet: number; sepolia: number; base: number; 'base-sepolia': number; total: number };
   }> {
     const allEntries = this.migrationService.getAllSnapshotEntries();
 
     const mainnetIds: number[] = [];
+    const sepoliaIds: number[] = [];
     const baseIds: number[] = [];
     const baseSepoliaIds: number[] = [];
 
@@ -244,6 +263,7 @@ export class BurnVerificationService implements OnModuleInit {
         const reservation = await this.pixelsService.getReservation(entry.id);
         if (!reservation.burnConfirmed) {
           if (entry.network === 'mainnet') mainnetIds.push(entry.id);
+          else if (entry.network === 'sepolia') sepoliaIds.push(entry.id);
           else if (entry.network === 'base') baseIds.push(entry.id);
           else if (entry.network === 'base-sepolia') baseSepoliaIds.push(entry.id);
         }
@@ -253,19 +273,25 @@ export class BurnVerificationService implements OnModuleInit {
     }
 
     this.logger.log(
-      `Sweep: ${mainnetIds.length} mainnet, ${baseIds.length} base, ${baseSepoliaIds.length} base-sepolia unconfirmed`,
+      `Sweep: ${mainnetIds.length} mainnet, ${sepoliaIds.length} sepolia, ${baseIds.length} base, ${baseSepoliaIds.length} base-sepolia unconfirmed`,
     );
 
     const results: {
       mainnet: VerifyBurnsResult | null;
+      sepolia: VerifyBurnsResult | null;
       base: VerifyBurnsResult | null;
       'base-sepolia': VerifyBurnsResult | null;
-    } = { mainnet: null, base: null, 'base-sepolia': null };
-    const summary = { mainnet: 0, base: 0, 'base-sepolia': 0, total: 0 };
+    } = { mainnet: null, sepolia: null, base: null, 'base-sepolia': null };
+    const summary = { mainnet: 0, sepolia: 0, base: 0, 'base-sepolia': 0, total: 0 };
 
     if (mainnetIds.length > 0) {
       results.mainnet = await this.verifyAndSetBurnFlags(mainnetIds, 'mainnet');
       summary.mainnet = results.mainnet.results.filter((r) => r.status === 'flag_set').length;
+    }
+
+    if (sepoliaIds.length > 0) {
+      results.sepolia = await this.verifyAndSetBurnFlags(sepoliaIds, 'sepolia');
+      summary.sepolia = results.sepolia.results.filter((r) => r.status === 'flag_set').length;
     }
 
     if (baseIds.length > 0) {
@@ -280,7 +306,7 @@ export class BurnVerificationService implements OnModuleInit {
       ).length;
     }
 
-    summary.total = summary.mainnet + summary.base + summary['base-sepolia'];
+    summary.total = summary.mainnet + summary.sepolia + summary.base + summary['base-sepolia'];
     this.logger.log(`Sweep complete: ${summary.total} new burn flags set`);
 
     return { results, summary };
