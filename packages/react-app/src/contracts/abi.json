@@ -2043,7 +2043,7 @@
       "chainId": "84532",
       "contracts": {
         "PX": {
-          "address": "0x356C8f8Ed28B6A0386a948AaD7acA06799d6bf34",
+          "address": "0x5aB883e20f6A1ea2Da09658CF9F0D127CC403fb6",
           "abi": [
             {
               "type": "constructor",
