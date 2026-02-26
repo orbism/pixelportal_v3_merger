@@ -292,7 +292,7 @@ class ClaimPixelsDialogStore extends Reactionable(
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.ReadyToClaim);
         }
-      } else if (this.pendingReservations.length > 0) {
+      } else if (this.pendingReservations.length > 0 && (this.burnedMainnet.length > 0 || this.burnedBase.length > 0)) {
         log("route: WaitingForConfirmation (burn pending on server)");
         this.destroyNavigation();
         this.pushNavigation(ClaimPixelsModalView.WaitingForConfirmation);
