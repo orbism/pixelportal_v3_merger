@@ -66,6 +66,7 @@ export interface Configuration {
   };
   rpcRateLimitDelayMs: number;
   rpcBlockRangeLimit: number;
+  cronSecret: string;
 }
 
 export default () => ({
@@ -142,4 +143,5 @@ export default () => ({
   // Alchemy free tier limits eth_getLogs to 10 block range
   // Paid plans can use larger ranges (e.g., 2000)
   rpcBlockRangeLimit: parseInt(process.env.RPC_BLOCK_RANGE_LIMIT) || 10,
+  cronSecret: process.env.CRON_SECRET || '',
 });

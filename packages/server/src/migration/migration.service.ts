@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 
-interface SnapshotEntry {
+export interface SnapshotEntry {
   address: string;
   id: number;
   network: 'mainnet' | 'base' | 'base-sepolia';
@@ -115,6 +115,13 @@ export class MigrationService {
       base: baseCount,
       'base-sepolia': baseSepoliaCount,
     };
+  }
+
+  /**
+   * Get all snapshot entries (used by sweep to check all reserved tokens)
+   */
+  getAllSnapshotEntries(): SnapshotEntry[] {
+    return this.snapshot;
   }
 
   /**

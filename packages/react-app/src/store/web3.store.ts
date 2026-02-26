@@ -462,6 +462,14 @@ class Web3Store extends Reactionable(Web3providerStore) {
     return this.pxContract.claimReservedToken(tokenId);
   }
 
+  async claimReservedTokensBatch(tokenIds: number[]) {
+    if (!this.pxContract) {
+      throw new Error("PX contract not initialized");
+    }
+    //@ts-ignore - claimReservedTokensBatch is added in contract update
+    return this.pxContract.claimReservedTokensBatch(tokenIds);
+  }
+
   async canClaimReservedToken(tokenId: number, user: string) {
     if (!this.pxContract) {
       throw new Error("PX contract not initialized");

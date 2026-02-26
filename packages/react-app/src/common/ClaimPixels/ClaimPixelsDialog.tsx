@@ -1,4 +1,5 @@
-import { Box, Checkbox, Divider, Flex, SimpleGrid, VStack, HStack, Alert, AlertIcon } from "@chakra-ui/react";
+import { Box, Divider, Flex, SimpleGrid, VStack, HStack, Alert, AlertIcon } from "@chakra-ui/react";
+import { ethers } from "ethers";
 import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
 import Button from "../../DSL/Button/Button";
@@ -39,6 +40,7 @@ const ClaimPixelsDialog = observer(({ store, onSuccess, onCompleteClose }: Claim
       {store.currentView === ClaimPixelsModalView.BurningMainnet && <BurningPixels store={store} network="mainnet" />}
       {store.currentView === ClaimPixelsModalView.BurningBase && <BurningPixels store={store} network="base" />}
       {store.currentView === ClaimPixelsModalView.WaitingForConfirmation && <WaitingForConfirmation store={store} />}
+      {store.currentView === ClaimPixelsModalView.ApprovingDOG && <ApprovingDOG store={store} />}
       {store.currentView === ClaimPixelsModalView.ReadyToClaim && <ReadyToClaim store={store} />}
       {store.currentView === ClaimPixelsModalView.ClaimingPixels && <ClaimingPixels store={store} />}
       {store.currentView === ClaimPixelsModalView.Complete && (
@@ -237,6 +239,9 @@ const ConfirmBurn = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
   const network = store.pendingBurnNetwork;
   const pixelCount = network === "mainnet" ? store.mainnetPixelsToBurn.length : store.basePixelsToBurn.length;
   const networkName = network === "mainnet" ? "Ethereum Mainnet" : "Base";
+  const dogAmount = network === "mainnet"
+    ? store.dogToReceiveFromMainnetBurn
+    : store.dogToReceiveFromBaseBurn;
 
   return (
     <VStack spacing={6} align="stretch">
@@ -261,7 +266,7 @@ const ConfirmBurn = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
           <strong>Pixels to burn:</strong> {pixelCount}
         </Typography>
         <Typography variant={TVariant.ComicSans14} block>
-          <strong>$DOG to receive:</strong> ~{store.formatDogAmount(store.totalDogToReceiveFromBurn)} $DOG
+          <strong>$DOG to receive:</strong> ~{store.formatDogAmount(dogAmount)} $DOG
         </Typography>
         <Typography variant={TVariant.ComicSans12} block mt={1} color="gray.500">
           (99% after 1% burn fee)
@@ -361,7 +366,24 @@ const WaitingForConfirmation = observer(({ store }: { store: ClaimPixelsDialogSt
 });
 
 // ============================================
-// Ready to Claim - Select Pixels
+// Approving DOG Spend
+// ============================================
+const ApprovingDOG = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
+  return (
+    <VStack spacing={6} align="center">
+      <Loading title="Approving $DOG spend..." showSigningHint={true} />
+      <Typography variant={TVariant.ComicSans14} textAlign="center">
+        Please confirm the $DOG approval in your wallet.
+      </Typography>
+      <Typography variant={TVariant.ComicSans12} textAlign="center" color="gray.500">
+        This allows the contract to lock your $DOG when you claim pixels.
+      </Typography>
+    </VStack>
+  );
+});
+
+// ============================================
+// Ready to Claim - All-or-nothing pixel claim
 // ============================================
 const ReadyToClaim = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
   if (store.claimablePixels.length === 0) {
@@ -373,12 +395,17 @@ const ReadyToClaim = observer(({ store }: { store: ClaimPixelsDialogStore }) => 
         <Typography variant={TVariant.ComicSans16} block>
           You need to burn your v1/v2 pixels first before claiming in v3.
         </Typography>
-        <Button mt={4} onClick={() => store.destroyNavigation() || store.pushNavigation(ClaimPixelsModalView.Overview)}>
+        <Button mt={4} onClick={() => { store.destroyNavigation(); store.pushNavigation(ClaimPixelsModalView.Overview); }}>
           Back to Overview
         </Button>
       </Box>
     );
   }
+
+  const dogBalanceFormatted = store.dogBalanceOnBase
+    ? store.formatDogAmount(ethers.utils.formatEther(store.dogBalanceOnBase))
+    : "Loading...";
+  const dogNeededFormatted = store.formatDogAmount(store.totalDogToLockForClaim);
 
   return (
     <VStack spacing={4} align="stretch">
@@ -387,71 +414,77 @@ const ReadyToClaim = observer(({ store }: { store: ClaimPixelsDialogStore }) => 
           Claim Your Pixels
         </Typography>
         <Typography variant={TVariant.ComicSans14} block mt={2}>
-          Your burns have been verified. Select pixels to claim in v3.
+          Your burns have been verified. Claim all {store.claimablePixels.length} pixel(s) in v3.
         </Typography>
       </Box>
 
+      {/* DOG balance status */}
       <Box bg="blue.50" p={3} borderRadius="md">
         <Typography variant={TVariant.ComicSans12} block>
-          <strong>$DOG needed:</strong> ~{store.formatDogAmount(store.totalDogToLockForClaim)} $DOG
+          <strong>Your $DOG balance:</strong> {dogBalanceFormatted} $DOG
         </Typography>
-        <Typography variant={TVariant.ComicSans10} block mt={1} color="gray.600">
-          (55,240 $DOG per pixel, locked in contract)
+        <Typography variant={TVariant.ComicSans12} block mt={1}>
+          <strong>Required to claim:</strong> {dogNeededFormatted} $DOG{" "}
+          <span style={{ fontSize: "0.75em", color: "gray" }}>(55,240 $DOG per pixel)</span>
         </Typography>
       </Box>
 
-      <HStack justify="space-between">
-        <Button size="sm" onClick={() => store.selectAll()} isDisabled={store.selectedPixels.length === store.claimablePixels.length}>
-          Select All
-        </Button>
-        <Button size="sm" onClick={() => store.deselectAll()} isDisabled={store.selectedPixels.length === 0}>
-          Deselect All
-        </Button>
-      </HStack>
+      {/* Insufficient DOG warning */}
+      {!store.hasSufficientDog && (
+        <Alert status="warning" borderRadius="md">
+          <AlertIcon />
+          <Box>
+            <Typography variant={TVariant.ComicSans14} block>
+              Insufficient $DOG on Base — bridge via Superbridge first.
+            </Typography>
+            <Link href={store.superbridgeUrl} isExternal>
+              <Typography variant={TVariant.ComicSans14} color="blue.500">
+                Bridge $DOG via Superbridge →
+              </Typography>
+            </Link>
+          </Box>
+        </Alert>
+      )}
 
+      {/* Superbridge link for V1 migrators */}
+      {store.eligibility.mainnet.length > 0 && store.hasSufficientDog && (
+        <Box textAlign="center">
+          <Typography variant={TVariant.ComicSans12} color="gray.500">
+            Bridged $DOG from Ethereum?{" "}
+            <Link href={store.superbridgeUrl} isExternal>
+              <Typography variant={TVariant.ComicSans12} as="span" color="blue.500">
+                Superbridge
+              </Typography>
+            </Link>
+          </Typography>
+        </Box>
+      )}
+
+      {/* Read-only pixel grid */}
       <Box maxH="300px" overflowY="auto">
         <SimpleGrid columns={{ base: 3, md: 4 }} spacing={3}>
-          {store.claimablePixels.map(pixel => {
-            const isSelected = store.selectedPixels.includes(pixel.tokenId);
-            return (
-              <Box
-                key={pixel.tokenId}
-                onClick={() => store.togglePixelSelection(pixel.tokenId)}
-                cursor="pointer"
-                position="relative"
-                border={isSelected ? "3px solid" : "1px solid"}
-                borderColor={isSelected ? "green.500" : "gray.300"}
-                p={2}
-                borderRadius="md"
-                _hover={{ borderColor: "green.400" }}
-              >
-                <Checkbox
-                  isChecked={isSelected}
-                  onChange={() => store.togglePixelSelection(pixel.tokenId)}
-                  position="absolute"
-                  top={1}
-                  right={1}
-                  zIndex={1}
-                />
-                <PixelPane size="xs" pupper={pixel.tokenId} />
-                <Typography variant={TVariant.PresStart10} textAlign="center" mt={1}>
-                  #{pixel.tokenId}
-                </Typography>
-              </Box>
-            );
-          })}
+          {store.claimablePixels.map(pixel => (
+            <Box
+              key={pixel.tokenId}
+              position="relative"
+              border="1px solid"
+              borderColor="green.400"
+              p={2}
+              borderRadius="md"
+              bg="green.50"
+            >
+              <PixelPane size="xs" pupper={pixel.tokenId} />
+              <Typography variant={TVariant.PresStart10} textAlign="center" mt={1}>
+                #{pixel.tokenId}
+              </Typography>
+            </Box>
+          ))}
         </SimpleGrid>
-      </Box>
-
-      <Box textAlign="center">
-        <Typography variant={TVariant.ComicSans14}>
-          Selected: {store.selectedPixels.length} / {store.claimablePixels.length}
-        </Typography>
       </Box>
 
       <Form onSubmit={() => store.handleClaimSubmit()}>
         <Flex justifyContent="center">
-          <Submit label="Claim Selected" isDisabled={!store.canClaim} />
+          <Submit label="Claim Your Pixels!" isDisabled={!store.canClaim} />
         </Flex>
       </Form>
     </VStack>
@@ -462,12 +495,16 @@ const ReadyToClaim = observer(({ store }: { store: ClaimPixelsDialogStore }) => 
 // Claiming Pixels Loading State
 // ============================================
 const ClaimingPixels = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
+  const { claimed, total } = store.claimProgress;
+  const progressLabel = total > 0 && claimed < total
+    ? `Claiming ${claimed} of ${total} pixels...`
+    : total > 0
+      ? `Claimed ${claimed} of ${total} pixels!`
+      : `Claiming ${store.selectedPixels.length} pixel(s) in v3...`;
+
   return (
     <VStack spacing={6}>
-      <Loading title="Claiming pixels..." showSigningHint={!store.hasUserSignedTx} />
-      <Typography variant={TVariant.ComicSans14} textAlign="center">
-        Claiming {store.selectedPixels.length} pixel(s) in v3...
-      </Typography>
+      <Loading title={progressLabel} showSigningHint={!store.hasUserSignedTx} />
       {store.txHash && (
         <Link href={getEtherscanURL(store.txHash, "tx")} isExternal>
           <Typography variant={TVariant.ComicSans12} color="blue.500">
@@ -500,6 +537,13 @@ const Complete = observer(
                 View transaction
               </Link>
             )}
+          </Flex>
+          <Flex justifyContent="center" mt={3}>
+            <Link href="/leaderbork/activity">
+              <Typography variant={TVariant.ComicSans14} color="blue.500">
+                Check your spot on the LeaderBork →
+              </Typography>
+            </Link>
           </Flex>
           <Flex justifyContent="center" mt={6}>
             <Button onClick={onClose}>Close</Button>

@@ -3,11 +3,13 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Inject,
   Logger,
   Param,
   Post,
   Render,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { ConfigService } from '@nestjs/config';
@@ -357,6 +359,28 @@ export class AppController {
   @Get('migration/reload')
   reloadMigrationSnapshot() {
     return this.migration.reloadSnapshot();
+  }
+
+  /**
+   * Sweep all snapshot entries and verify burns for any reserved but unconfirmed tokens.
+   * Protected by X-Cron-Secret header. Intended for use by VPS/Vercel cron jobs.
+   */
+  @Post('migration/verify-burns/sweep')
+  async sweepVerifyBurns(
+    @Headers('x-cron-secret') cronSecret: string,
+  ) {
+    const expectedSecret = this.configService.get('cronSecret');
+    if (expectedSecret && cronSecret !== expectedSecret) {
+      throw new UnauthorizedException('Invalid cron secret');
+    }
+
+    this.logger.log('Sweep verify-burns triggered');
+    try {
+      return await this.burnVerification.sweepUnconfirmedBurns();
+    } catch (error) {
+      this.logger.error(`Sweep verify-burns failed: ${error.message}`);
+      throw new BadRequestException(error.message);
+    }
   }
 
   /**

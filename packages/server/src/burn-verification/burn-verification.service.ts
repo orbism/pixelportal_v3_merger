@@ -4,7 +4,7 @@ import { Contract, JsonRpcProvider } from 'ethers';
 import { Configuration } from '../config/configuration';
 import { LEGACY_PX_ABI } from '../contracts/legacyAbi';
 import * as contractData from '../contracts/abi.json';
-import { MigrationService } from '../migration/migration.service';
+import { MigrationService, SnapshotEntry } from '../migration/migration.service';
 import { OwnTheDogeContractService } from '../ownthedoge-contracts/ownthedoge-contracts.service';
 
 export interface TokenResult {
@@ -223,5 +223,66 @@ export class BurnVerificationService implements OnModuleInit {
     }
 
     return { results, txHash };
+  }
+
+  /**
+   * Sweep all snapshot entries and verify burns for any that are reserved but unconfirmed.
+   * Called by the cron sweep endpoint.
+   */
+  async sweepUnconfirmedBurns(): Promise<{
+    results: { mainnet: VerifyBurnsResult | null; base: VerifyBurnsResult | null; 'base-sepolia': VerifyBurnsResult | null };
+    summary: { mainnet: number; base: number; 'base-sepolia': number; total: number };
+  }> {
+    const allEntries = this.migrationService.getAllSnapshotEntries();
+
+    const mainnetIds: number[] = [];
+    const baseIds: number[] = [];
+    const baseSepoliaIds: number[] = [];
+
+    for (const entry of allEntries) {
+      try {
+        const reservation = await this.pixelsService.getReservation(entry.id);
+        if (!reservation.burnConfirmed) {
+          if (entry.network === 'mainnet') mainnetIds.push(entry.id);
+          else if (entry.network === 'base') baseIds.push(entry.id);
+          else if (entry.network === 'base-sepolia') baseSepoliaIds.push(entry.id);
+        }
+      } catch {
+        // Token not reserved on V3 — skip
+      }
+    }
+
+    this.logger.log(
+      `Sweep: ${mainnetIds.length} mainnet, ${baseIds.length} base, ${baseSepoliaIds.length} base-sepolia unconfirmed`,
+    );
+
+    const results: {
+      mainnet: VerifyBurnsResult | null;
+      base: VerifyBurnsResult | null;
+      'base-sepolia': VerifyBurnsResult | null;
+    } = { mainnet: null, base: null, 'base-sepolia': null };
+    const summary = { mainnet: 0, base: 0, 'base-sepolia': 0, total: 0 };
+
+    if (mainnetIds.length > 0) {
+      results.mainnet = await this.verifyAndSetBurnFlags(mainnetIds, 'mainnet');
+      summary.mainnet = results.mainnet.results.filter((r) => r.status === 'flag_set').length;
+    }
+
+    if (baseIds.length > 0) {
+      results.base = await this.verifyAndSetBurnFlags(baseIds, 'base');
+      summary.base = results.base.results.filter((r) => r.status === 'flag_set').length;
+    }
+
+    if (baseSepoliaIds.length > 0) {
+      results['base-sepolia'] = await this.verifyAndSetBurnFlags(baseSepoliaIds, 'base-sepolia');
+      summary['base-sepolia'] = results['base-sepolia'].results.filter(
+        (r) => r.status === 'flag_set',
+      ).length;
+    }
+
+    summary.total = summary.mainnet + summary.base + summary['base-sepolia'];
+    this.logger.log(`Sweep complete: ${summary.total} new burn flags set`);
+
+    return { results, summary };
   }
 }
