@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.30;
 
 import {Script, console} from "forge-std/Script.sol";
 import {PX} from "../src/PX.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
-import {DeployConfig} from "./DeployConfig.sol";
 
 /**
  * @title UpgradePX
@@ -246,6 +244,8 @@ contract UpgradePX is Script {
         (bool success, bytes memory returnData) = CREATE2_FACTORY.call(abi.encodePacked(salt, creationCode));
 
         require(success, "CREATE2 deployment failed");
+        // casting to 'bytes20' is safe because returnData is from CREATE2 which returns 20-byte address
+        // forge-lint: disable-next-line(unsafe-typecast)
         deployed = address(uint160(bytes20(returnData)));
         require(deployed != address(0), "Deployment returned zero address");
     }
@@ -317,9 +317,7 @@ contract UpgradePX is Script {
      * @param proxyAddress Address of the proxy contract
      * @param newImplementation Address of the new implementation
      */
-    function upgradeViaProxyAdmin(address proxyAdminAddress, address proxyAddress, address newImplementation)
-        external
-    {
+    function upgradeViaProxyAdmin(address proxyAdminAddress, address proxyAddress, address newImplementation) external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
 

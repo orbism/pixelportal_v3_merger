@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
-import {Vm} from "forge-std/Vm.sol";
 import {PX} from "../src/PX.sol";
 import {PXV2} from "../src/PXV2.sol";
 import {MockDOG20} from "./mocks/MockDOG20.sol";
@@ -18,8 +17,6 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
  * 2. Storage layout preservation during upgrades
  * 3. Functional upgrade from PX to PXV2
  * 4. State preservation across upgrades
- * 5. New functionality in upgraded contract
- * 6. Upgrade reversal and multiple upgrades
  */
 contract PXUpgrade is Test {
     PX public pxTokenV1;
@@ -158,8 +155,7 @@ contract PXUpgrade is Test {
         assertEq(pxTokenV2.balanceOf(minter1), preUpgradeBalance1);
         assertEq(pxTokenV2.balanceOf(minter2), preUpgradeBalance2);
 
-        // Verify critical V1 constants are preserved
-        assertEq(pxTokenV2.DOG_TO_PIXEL_SATOSHIS(), DOG_TO_PIXEL_SATOSHIS);
+        // Verify critical constants are preserved
         assertEq(pxTokenV2.INDEX_OFFSET(), INDEX_OFFSET);
         assertEq(pxTokenV2.SHIBA_WIDTH(), SHIBA_WIDTH);
         assertEq(pxTokenV2.SHIBA_HEIGHT(), SHIBA_HEIGHT);
@@ -179,100 +175,171 @@ contract PXUpgrade is Test {
         _upgradeToV2();
         pxTokenV2 = PXV2(address(proxy));
 
-        // Initialize V2 features
-        uint256 maxMintPerTx = 5;
-        string memory description = "Upgraded PX with enhanced features";
-        uint256 mintCooldown = 3600; // 1 hour
+        // V2 requires startMinting() before minting can work
+        pxTokenV2.startMinting();
 
-        pxTokenV2.initializeV2(maxMintPerTx, description, mintCooldown);
+        // V2 should have same functionality as V1
+        uint256 preBalance = pxTokenV2.balanceOf(minter1);
+        uint256 preRemaining = pxTokenV2.puppersRemaining();
 
-        // Advance time to clear any cooldowns from V1 activity
-        // Reset to a clean timestamp to avoid timing issues
-        vm.warp(10000);
+        // Test minting still works after upgrade
+        vm.prank(minter1);
+        pxTokenV2.mintPuppers(2, address(dogToken));
 
-        // Test new V2 functionality
-        assertEq(pxTokenV2.maxMintPerTx(), maxMintPerTx);
-        assertEq(pxTokenV2.description(), description);
-        assertEq(pxTokenV2.mintCooldown(), mintCooldown);
-        assertFalse(pxTokenV2.emergencyWithdrawalEnabled());
-        assertEq(pxTokenV2.version(), "2.0.0");
-
-        // Test enhanced metadata function
-        (string memory name, string memory symbol, string memory desc, uint256 supply, uint256 remaining) =
-            pxTokenV2.getMetadata();
-
-        assertEq(name, "Pixel Token V1");
-        assertEq(symbol, "PXV1");
-        assertEq(desc, description);
-        assertEq(supply, TOTAL_SUPPLY);
-        assertTrue(remaining > 0);
-
-        // Test batch minting (new V2 feature)
-        uint256 batchSize = 3;
-        uint256 puppersRemainingBefore = pxTokenV2.puppersRemaining();
-
-        // Use minter2 who hasn't minted yet (no cooldown)
-        vm.prank(minter2);
-        pxTokenV2.batchMintPuppers(batchSize);
-
-        // Check balances: minter2 had previous V1 balance + new batch mint
-        uint256 expectedMinter2Balance = 2 + batchSize; // 2 from V1 setup + 3 from batch
-        assertEq(pxTokenV2.balanceOf(minter2), expectedMinter2Balance);
-        assertEq(pxTokenV2.puppersRemaining(), puppersRemainingBefore - batchSize);
-
-        // Test cooldown functionality
-        assertTrue(pxTokenV2.canMint(minter1)); // minter1 hasn't minted in V2 yet
-        assertFalse(pxTokenV2.canMint(minter2)); // minter2 just minted, on cooldown
-
-        // Test cooldown bypass by advancing time
-        vm.warp(10000 + mintCooldown + 1);
-        assertTrue(pxTokenV2.canMint(minter2)); // Cooldown elapsed for minter2
+        assertEq(pxTokenV2.balanceOf(minter1), preBalance + 2);
+        assertEq(pxTokenV2.puppersRemaining(), preRemaining - 2);
 
         console.log("  V2 functionality working correctly");
-        console.log("  Batch minting:", batchSize, "tokens");
-        console.log("  Cooldown system operational");
+        console.log("  Minting works after upgrade");
     }
 
-    function test_AdminFunctionality() public {
-        console.log("Testing V2 admin functionality...");
+    function test_V2BurnReturns100Percent() public {
+        console.log("Testing V2 burn returns 100% of locked tokens...");
 
+        // Set up state and upgrade
         _setupInitialV1State();
         _upgradeToV2();
         pxTokenV2 = PXV2(address(proxy));
 
-        // Initialize V2
-        pxTokenV2.initializeV2(5, "Test description", 3600);
+        // Get minter1's token IDs
+        uint256 minter1Balance = pxTokenV2.balanceOf(minter1);
+        assertTrue(minter1Balance > 0, "Minter1 should have tokens");
 
-        // Test admin functions
-        uint256 newLimit = 10;
-        pxTokenV2.setMaxMintPerTx(newLimit);
-        assertEq(pxTokenV2.maxMintPerTx(), newLimit);
+        // Find a token owned by minter1
+        uint256 tokenToBurn = 0;
+        for (uint256 i = INDEX_OFFSET; i < INDEX_OFFSET + TOTAL_SUPPLY; i++) {
+            try pxTokenV2.ownerOf(i) returns (address tokenOwner) {
+                if (tokenOwner == minter1) {
+                    tokenToBurn = i;
+                    break;
+                }
+            } catch {}
+        }
+        assertTrue(tokenToBurn != 0, "Should find a token to burn");
 
-        string memory newDescription = "Updated description";
-        pxTokenV2.setDescription(newDescription);
-        assertEq(pxTokenV2.description(), newDescription);
+        // Get the lock amount for this token
+        (address lockToken, uint256 lockAmount) = pxTokenV2.pixelLocks(tokenToBurn);
+        assertEq(lockToken, address(dogToken), "Lock token should be DOG token");
+        assertEq(lockAmount, DOG_TO_PIXEL_SATOSHIS, "Lock amount should match");
 
-        uint256 newCooldown = 7200; // 2 hours
-        pxTokenV2.setMintCooldown(newCooldown);
-        assertEq(pxTokenV2.mintCooldown(), newCooldown);
+        // Record balances before burn
+        uint256 minter1DogBefore = dogToken.balanceOf(minter1);
+        uint256 contractDogBefore = dogToken.balanceOf(address(proxy));
 
-        // Test emergency withdrawal (one-way enable)
-        assertFalse(pxTokenV2.emergencyWithdrawalEnabled());
-        pxTokenV2.enableEmergencyWithdrawal();
-        assertTrue(pxTokenV2.emergencyWithdrawalEnabled());
+        // Burn the token
+        uint256[] memory tokensToBurn = new uint256[](1);
+        tokensToBurn[0] = tokenToBurn;
 
-        // Test non-admin cannot use admin functions
-        vm.startPrank(attacker);
-        vm.expectRevert(
-            abi.encodeWithSignature(
-                "AccessControlUnauthorizedAccount(address,bytes32)", attacker, pxTokenV2.DEFAULT_ADMIN_ROLE()
-            )
-        );
-        pxTokenV2.setMaxMintPerTx(1);
-        vm.stopPrank();
+        vm.prank(minter1);
+        pxTokenV2.burnPuppers(tokensToBurn);
 
-        console.log("  Admin functions working correctly");
-        console.log("  Access control enforced for V2 features");
+        // Verify 100% of locked tokens returned (no dev fee)
+        uint256 minter1DogAfter = dogToken.balanceOf(minter1);
+        uint256 contractDogAfter = dogToken.balanceOf(address(proxy));
+
+        // Minter should receive exactly 100% of lock amount
+        assertEq(minter1DogAfter - minter1DogBefore, lockAmount, "Minter should receive 100% of lock amount");
+
+        // Contract balance should decrease by exactly lock amount
+        assertEq(contractDogBefore - contractDogAfter, lockAmount, "Contract should transfer exactly lock amount");
+
+        console.log("  V2 burn returns 100% verified");
+        console.log("  Lock amount:", lockAmount);
+        console.log("  Amount returned to burner:", minter1DogAfter - minter1DogBefore);
+    }
+
+    function test_V2VsV1BurnFeeComparison() public {
+        console.log("Testing V2 vs V1 burn fee comparison...");
+
+        // First test V1 behavior (1% dev fee)
+        vm.prank(minter1);
+        pxTokenV1.mintPuppers(1, address(dogToken));
+
+        // Find minter1's token
+        uint256 v1Token = 0;
+        for (uint256 i = INDEX_OFFSET; i < INDEX_OFFSET + TOTAL_SUPPLY; i++) {
+            try pxTokenV1.ownerOf(i) returns (address tokenOwner) {
+                if (tokenOwner == minter1) {
+                    v1Token = i;
+                    break;
+                }
+            } catch {}
+        }
+
+        (, uint256 v1LockAmount) = pxTokenV1.pixelLocks(v1Token);
+        uint256 minter1DogBeforeV1 = dogToken.balanceOf(minter1);
+        uint256 devFeeBefore = dogToken.balanceOf(devFeeAddress);
+
+        uint256[] memory v1TokensToBurn = new uint256[](1);
+        v1TokensToBurn[0] = v1Token;
+
+        vm.prank(minter1);
+        pxTokenV1.burnPuppers(v1TokensToBurn);
+
+        uint256 minter1DogAfterV1 = dogToken.balanceOf(minter1);
+        uint256 devFeeAfter = dogToken.balanceOf(devFeeAddress);
+
+        uint256 v1ReturnedToMinter = minter1DogAfterV1 - minter1DogBeforeV1;
+        uint256 v1DevFee = devFeeAfter - devFeeBefore;
+
+        // V1 should take 1% dev fee
+        assertEq(v1DevFee, v1LockAmount / 100, "V1 should take 1% dev fee");
+        assertEq(v1ReturnedToMinter, v1LockAmount - v1DevFee, "V1 should return 99% to minter");
+
+        console.log("  V1 lock amount:", v1LockAmount);
+        console.log("  V1 dev fee (1%):", v1DevFee);
+        console.log("  V1 returned to minter (99%):", v1ReturnedToMinter);
+
+        // Now upgrade to V2 and test
+        _upgradeToV2();
+        pxTokenV2 = PXV2(address(proxy));
+
+        // V2 requires startMinting() before minting can work
+        pxTokenV2.startMinting();
+
+        // Mint a new token in V2
+        vm.prank(minter2);
+        pxTokenV2.mintPuppers(1, address(dogToken));
+
+        // Find minter2's token
+        uint256 v2Token = 0;
+        for (uint256 i = INDEX_OFFSET; i < INDEX_OFFSET + TOTAL_SUPPLY; i++) {
+            try pxTokenV2.ownerOf(i) returns (address tokenOwner) {
+                if (tokenOwner == minter2) {
+                    v2Token = i;
+                    break;
+                }
+            } catch {}
+        }
+
+        (, uint256 v2LockAmount) = pxTokenV2.pixelLocks(v2Token);
+        uint256 minter2DogBeforeV2 = dogToken.balanceOf(minter2);
+        uint256 devFeeBeforeV2 = dogToken.balanceOf(devFeeAddress);
+
+        uint256[] memory v2TokensToBurn = new uint256[](1);
+        v2TokensToBurn[0] = v2Token;
+
+        vm.prank(minter2);
+        pxTokenV2.burnPuppers(v2TokensToBurn);
+
+        uint256 minter2DogAfterV2 = dogToken.balanceOf(minter2);
+        uint256 devFeeAfterV2 = dogToken.balanceOf(devFeeAddress);
+
+        uint256 v2ReturnedToMinter = minter2DogAfterV2 - minter2DogBeforeV2;
+        uint256 v2DevFee = devFeeAfterV2 - devFeeBeforeV2;
+
+        // V2 should NOT take any dev fee
+        assertEq(v2DevFee, 0, "V2 should NOT take any dev fee");
+        assertEq(v2ReturnedToMinter, v2LockAmount, "V2 should return 100% to minter");
+
+        console.log("  V2 lock amount:", v2LockAmount);
+        console.log("  V2 dev fee (0%):", v2DevFee);
+        console.log("  V2 returned to minter (100%):", v2ReturnedToMinter);
+
+        // Compare: V2 returns more than V1
+        assertGt(v2ReturnedToMinter, v1ReturnedToMinter, "V2 should return more than V1");
+
+        console.log("  V2 returns", v2ReturnedToMinter - v1ReturnedToMinter, "more than V1");
     }
 
     function test_MultipleUpgrades() public {
@@ -288,18 +355,16 @@ contract PXUpgrade is Test {
         // First upgrade: V1 -> V2
         _upgradeToV2();
         pxTokenV2 = PXV2(address(proxy));
-        pxTokenV2.initializeV2(5, "V2 Description", 3600);
 
-        // Advance time to clear any cooldowns from V1 activity
-        // Reset to a clean timestamp to avoid timing issues
-        vm.warp(10000);
+        // V2 requires startMinting() before minting can work
+        pxTokenV2.startMinting();
 
-        // Use V2 functionality (use minter2 after clearing cooldown)
+        // Use V2 (same as V1)
         vm.prank(minter2);
-        pxTokenV2.batchMintPuppers(2);
+        pxTokenV2.mintPuppers(2, address(dogToken));
 
         uint256 afterV2Balance = pxTokenV2.balanceOf(minter2);
-        assertEq(afterV2Balance, initialBalance2 + 2); // minter2 had initialBalance2 (2) + 2 from V2 batch mint = 4
+        assertEq(afterV2Balance, initialBalance2 + 2);
 
         // Second upgrade: V2 -> V1 (downgrade for testing)
         PX newV1Implementation = new PX();
@@ -310,43 +375,10 @@ contract PXUpgrade is Test {
 
         // Verify state is preserved even across downgrade
         assertEq(downgradedPX.balanceOf(minter1), initialBalance1);
-        assertEq(downgradedPX.puppersRemaining(), initialRemaining - 2); // V2 batch -2
-
-        // V2 functions should not be available
-        vm.expectRevert();
-        PXV2(address(proxy)).version();
+        assertEq(downgradedPX.puppersRemaining(), initialRemaining - 2);
 
         console.log("  Multiple upgrades completed successfully");
         console.log("  State preserved across upgrade/downgrade cycle");
-    }
-
-    function test_UpgradeWithInitialization() public {
-        console.log("Testing upgrade with initialization data...");
-
-        _setupInitialV1State();
-
-        // Deploy V2 implementation
-        PXV2 implementationV2 = new PXV2();
-
-        // Prepare initialization data for V2
-        bytes memory v2InitData = abi.encodeWithSelector(
-            PXV2.initializeV2.selector,
-            7, // maxMintPerTx
-            "Initialized during upgrade",
-            1800 // mintCooldown (30 minutes)
-        );
-
-        // Upgrade with initialization
-        UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(implementationV2), v2InitData);
-
-        // Verify upgrade and initialization
-        pxTokenV2 = PXV2(address(proxy));
-        assertEq(pxTokenV2.maxMintPerTx(), 7);
-        assertEq(pxTokenV2.description(), "Initialized during upgrade");
-        assertEq(pxTokenV2.mintCooldown(), 1800);
-
-        console.log("  Upgrade with initialization successful");
-        console.log("  V2 initialized with custom parameters");
     }
 
     function test_UpgradeSecurityChecks() public {
@@ -358,14 +390,14 @@ contract PXUpgrade is Test {
 
         // Test: Cannot upgrade to non-contract address
         vm.expectRevert();
-        UUPSUpgradeable(address(proxy)).upgradeToAndCall(
-            attacker, // EOA address
-            ""
-        );
+        UUPSUpgradeable(address(proxy))
+            .upgradeToAndCall(
+                attacker, // EOA address
+                ""
+            );
 
         // Test: Upgrading to current implementation should work (not an error)
         address currentImpl = _getImplementationAddress();
-        // This should actually succeed, so let's not expect a revert
         UUPSUpgradeable(address(proxy)).upgradeToAndCall(currentImpl, "");
         // Verify it's still the same implementation
         assertEq(_getImplementationAddress(), currentImpl);
@@ -438,7 +470,7 @@ contract PXUpgrade is Test {
         console.log("  Upgraded to V2 implementation");
     }
 
-    function _verifyImplementationAddress(address expectedImpl) internal {
+    function _verifyImplementationAddress(address expectedImpl) internal view {
         // Get implementation address from storage slot
         bytes32 implSlot = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
         address actualImpl = address(uint160(uint256(vm.load(address(proxy), implSlot))));
@@ -451,7 +483,7 @@ contract PXUpgrade is Test {
         return address(uint160(uint256(vm.load(address(proxy), implSlot))));
     }
 
-    function _verifyTokenOwnership() internal {
+    function _verifyTokenOwnership() internal view {
         // Verify existing tokens still have correct owners
         for (uint256 i = 0; i < 10; i++) {
             // Check first 10 tokens
@@ -463,5 +495,179 @@ contract PXUpgrade is Test {
                 // Token doesn't exist, which is fine
             }
         }
+    }
+
+    // Tests for getReservedTokensForUser function
+
+    function test_GetReservedTokensForUser_BasicFunctionality() public {
+        _upgradeToV2();
+        pxTokenV2 = PXV2(address(proxy));
+
+        // Pause for reservations
+        pxTokenV2.pause();
+
+        // Reserve tokens for different users
+        uint256[] memory tokenIds = new uint256[](4);
+        tokenIds[0] = INDEX_OFFSET + 1;
+        tokenIds[1] = INDEX_OFFSET + 2;
+        tokenIds[2] = INDEX_OFFSET + 3;
+        tokenIds[3] = INDEX_OFFSET + 4;
+
+        address[] memory recipients = new address[](4);
+        recipients[0] = minter1;
+        recipients[1] = minter2;
+        recipients[2] = minter1;
+        recipients[3] = minter1;
+
+        pxTokenV2.reserveTokensForMigration(tokenIds, recipients);
+
+        // Set burn flags for some tokens
+        uint256[] memory burnTokenIds = new uint256[](2);
+        burnTokenIds[0] = tokenIds[0];
+        burnTokenIds[1] = tokenIds[3];
+        bool[] memory burnStatuses = new bool[](2);
+        burnStatuses[0] = true;
+        burnStatuses[1] = true;
+        pxTokenV2.setBurnFlags(burnTokenIds, burnStatuses);
+
+        // Query minter1's reservations
+        uint256[] memory queryIds = new uint256[](4);
+        queryIds[0] = tokenIds[0];
+        queryIds[1] = tokenIds[1];
+        queryIds[2] = tokenIds[2];
+        queryIds[3] = tokenIds[3];
+
+        (uint256[] memory resultTokenIds, bool[] memory resultBurnConfirmed) =
+            pxTokenV2.getReservedTokensForUser(minter1, queryIds);
+
+        // Should return 3 tokens (tokenIds[0], [2], [3] are for minter1)
+        assertEq(resultTokenIds.length, 3, "Should return 3 tokens for minter1");
+        assertEq(resultBurnConfirmed.length, 3, "Burn confirmed array should match");
+
+        // Verify returned tokens
+        assertEq(resultTokenIds[0], tokenIds[0]);
+        assertEq(resultTokenIds[1], tokenIds[2]);
+        assertEq(resultTokenIds[2], tokenIds[3]);
+
+        // Verify burn flags
+        assertTrue(resultBurnConfirmed[0], "Token 0 should have burn confirmed");
+        assertFalse(resultBurnConfirmed[1], "Token 2 should not have burn confirmed");
+        assertTrue(resultBurnConfirmed[2], "Token 3 should have burn confirmed");
+    }
+
+    function test_GetReservedTokensForUser_FiltersOtherUsers() public {
+        _upgradeToV2();
+        pxTokenV2 = PXV2(address(proxy));
+        pxTokenV2.pause();
+
+        // Reserve all tokens for minter2
+        uint256[] memory tokenIds = new uint256[](3);
+        tokenIds[0] = INDEX_OFFSET + 10;
+        tokenIds[1] = INDEX_OFFSET + 11;
+        tokenIds[2] = INDEX_OFFSET + 12;
+
+        address[] memory recipients = new address[](3);
+        recipients[0] = minter2;
+        recipients[1] = minter2;
+        recipients[2] = minter2;
+
+        pxTokenV2.reserveTokensForMigration(tokenIds, recipients);
+
+        // Query as minter1 - should return empty
+        (uint256[] memory resultTokenIds, bool[] memory resultBurnConfirmed) =
+            pxTokenV2.getReservedTokensForUser(minter1, tokenIds);
+
+        assertEq(resultTokenIds.length, 0, "Should return 0 tokens for minter1");
+        assertEq(resultBurnConfirmed.length, 0, "Burn confirmed array should be empty");
+    }
+
+    function test_GetReservedTokensForUser_NonReservedTokens() public {
+        _upgradeToV2();
+        pxTokenV2 = PXV2(address(proxy));
+        pxTokenV2.pause();
+
+        // Reserve only one token
+        uint256[] memory reserveIds = new uint256[](1);
+        reserveIds[0] = INDEX_OFFSET + 20;
+        address[] memory recipients = new address[](1);
+        recipients[0] = minter1;
+
+        pxTokenV2.reserveTokensForMigration(reserveIds, recipients);
+
+        // Query with mix of reserved and non-reserved tokens
+        uint256[] memory queryIds = new uint256[](3);
+        queryIds[0] = INDEX_OFFSET + 19; // Not reserved
+        queryIds[1] = INDEX_OFFSET + 20; // Reserved for minter1
+        queryIds[2] = INDEX_OFFSET + 21; // Not reserved
+
+        (uint256[] memory resultTokenIds, bool[] memory resultBurnConfirmed) =
+            pxTokenV2.getReservedTokensForUser(minter1, queryIds);
+
+        // Should only return the one reserved token
+        assertEq(resultTokenIds.length, 1, "Should return 1 token");
+        assertEq(resultTokenIds[0], INDEX_OFFSET + 20);
+        assertFalse(resultBurnConfirmed[0], "Burn not confirmed");
+    }
+
+    function test_GetReservedTokensForUser_EmptyInput() public {
+        _upgradeToV2();
+        pxTokenV2 = PXV2(address(proxy));
+
+        // Query with empty array
+        uint256[] memory emptyIds = new uint256[](0);
+
+        (uint256[] memory resultTokenIds, bool[] memory resultBurnConfirmed) =
+            pxTokenV2.getReservedTokensForUser(minter1, emptyIds);
+
+        assertEq(resultTokenIds.length, 0, "Should return empty array");
+        assertEq(resultBurnConfirmed.length, 0, "Burn confirmed should be empty");
+    }
+
+    function test_GetReservedTokensForUser_InvalidUserReverts() public {
+        _upgradeToV2();
+        pxTokenV2 = PXV2(address(proxy));
+
+        uint256[] memory queryIds = new uint256[](1);
+        queryIds[0] = INDEX_OFFSET + 1;
+
+        // Should revert with InvalidRecipient for zero address
+        vm.expectRevert(abi.encodeWithSignature("InvalidRecipient()"));
+        pxTokenV2.getReservedTokensForUser(address(0), queryIds);
+    }
+
+    function test_GetReservedTokensForUser_AfterClaim() public {
+        _upgradeToV2();
+        pxTokenV2 = PXV2(address(proxy));
+        pxTokenV2.pause();
+
+        // Reserve tokens
+        uint256[] memory tokenIds = new uint256[](2);
+        tokenIds[0] = INDEX_OFFSET + 30;
+        tokenIds[1] = INDEX_OFFSET + 31;
+
+        address[] memory recipients = new address[](2);
+        recipients[0] = minter1;
+        recipients[1] = minter1;
+
+        pxTokenV2.reserveTokensForMigration(tokenIds, recipients);
+
+        // Set burn flags
+        bool[] memory burnStatuses = new bool[](2);
+        burnStatuses[0] = true;
+        burnStatuses[1] = true;
+        pxTokenV2.setBurnFlags(tokenIds, burnStatuses);
+
+        // Unpause and claim one token
+        pxTokenV2.unpause();
+        vm.prank(minter1);
+        pxTokenV2.claimReservedToken(tokenIds[0], address(dogToken));
+
+        // Query both tokens - only unclaimed one should be returned
+        (uint256[] memory resultTokenIds, bool[] memory resultBurnConfirmed) =
+            pxTokenV2.getReservedTokensForUser(minter1, tokenIds);
+
+        assertEq(resultTokenIds.length, 1, "Should return 1 token after claim");
+        assertEq(resultTokenIds[0], tokenIds[1], "Should return unclaimed token");
+        assertTrue(resultBurnConfirmed[0], "Burn should be confirmed");
     }
 }

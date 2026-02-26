@@ -1,0 +1,12 @@
+{
+  "name": "reserve-claims",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "viem": "^2.21.0"
+  }
+}

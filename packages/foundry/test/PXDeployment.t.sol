@@ -1,15 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
-import {Vm} from "forge-std/Vm.sol";
-import {StdUtils} from "forge-std/StdUtils.sol";
 import {PX} from "../src/PX.sol";
 import {PXV2} from "../src/PXV2.sol";
 import {MockDOG20} from "./mocks/MockDOG20.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {DeployConfig} from "../script/DeployConfig.sol";
 
 /**
  * @title PXDeployment
@@ -50,6 +47,7 @@ contract PXDeployment is Test {
     uint256 public constant TEST_CHAIN_ID = 31337; // Local foundry
     string public constant TEST_TOKEN_NAME = "PX Token (Local)";
     string public constant TEST_TOKEN_SYMBOL = "PXLOCAL";
+    string public constant TEST_BASE_URI = "ipfs://local-";
     uint256 public constant TEST_SHIBA_WIDTH = 10;
     uint256 public constant TEST_SHIBA_HEIGHT = 10;
     uint256 public constant TOTAL_SUPPLY = TEST_SHIBA_WIDTH * TEST_SHIBA_HEIGHT;
@@ -92,36 +90,26 @@ contract PXDeployment is Test {
     function test_DeployPXUUPSScript() public {
         console.log("Testing DeployPXUUPS script...");
 
-        // Simulate script execution environment
-        vm.setEnv("PRIVATE_KEY", vm.toString(deployerPrivateKey));
-
         // Execute deployment logic (simulating script execution)
         vm.startPrank(deployer);
 
         // 1. Deploy implementation contract (regular deployment, not CREATE2)
         implementation = new PX();
 
-        // 2. Get configuration for local network
-        DeployConfig.NetworkConfig memory config = DeployConfig.getConfigForChainId(block.chainid, address(dogToken));
-
-        // Update config with our test DOG token
-        config.dog20Address = address(dogToken);
-        config.devFeeAddress = devFeeAddress;
-
-        // 3. Prepare initialization data with owner parameter
+        // 2. Prepare initialization data with owner parameter
         bytes memory initData = abi.encodeWithSelector(
             PX.__PX_init.selector,
-            config.tokenName,
-            config.tokenSymbol,
-            config.dog20Address,
-            config.ipfsUri,
-            config.shibaWidth,
-            config.shibaHeight,
-            config.devFeeAddress,
+            TEST_TOKEN_NAME,
+            TEST_TOKEN_SYMBOL,
+            address(dogToken),
+            TEST_BASE_URI,
+            TEST_SHIBA_WIDTH,
+            TEST_SHIBA_HEIGHT,
+            devFeeAddress,
             deployer // owner parameter for UUPS
         );
 
-        // 4. Deploy proxy using Nick's CREATE2 factory (matching script)
+        // 3. Deploy proxy using Nick's CREATE2 factory (matching script)
         bytes memory bytecode =
             abi.encodePacked(type(ERC1967Proxy).creationCode, abi.encode(address(implementation), initData));
 
@@ -229,46 +217,6 @@ contract PXDeployment is Test {
     }
 
     /**
-     * @dev Test deployment with different network configurations
-     */
-    function test_NetworkConfigurations() public {
-        console.log("Testing network configurations...");
-
-        // Test different chain IDs
-        uint256[] memory chainIds = new uint256[](5);
-        chainIds[0] = 1; // Ethereum mainnet
-        chainIds[1] = 11155111; // Ethereum Sepolia
-        chainIds[2] = 8453; // Base mainnet
-        chainIds[3] = 84532; // Base Sepolia
-        chainIds[4] = 31337; // Foundry local
-
-        for (uint256 i = 0; i < chainIds.length; i++) {
-            uint256 chainId = chainIds[i];
-
-            // Set chain ID
-            vm.chainId(chainId);
-
-            // Deploy a test ERC20 token for this test
-            MockDOG20 testToken = new MockDOG20();
-
-            // Get configuration
-            DeployConfig.NetworkConfig memory config = DeployConfig.getConfigForChainId(chainId, address(testToken));
-
-            // Verify configuration is not empty
-            assertTrue(bytes(config.name).length > 0);
-            assertTrue(bytes(config.tokenName).length > 0);
-            assertTrue(bytes(config.tokenSymbol).length > 0);
-            assertTrue(bytes(config.ipfsUri).length > 0);
-            assertTrue(config.shibaWidth > 0);
-            assertTrue(config.shibaHeight > 0);
-
-            console.log("  Chain ID", chainId, "config valid:", config.name);
-        }
-
-        console.log("  Network configuration validation successful");
-    }
-
-    /**
      * @dev Test deployment failure scenarios
      */
     function test_DeploymentFailureScenarios() public {
@@ -335,17 +283,12 @@ contract PXDeployment is Test {
         assertEq(pxToken.puppersRemaining(), preUpgradeRemaining);
         assertEq(pxToken.name(), preUpgradeName);
 
-        // Cast to V2 and test new functionality
+        // Cast to V2 and verify it works
         PXV2 pxTokenV2 = PXV2(address(proxy));
 
-        // Initialize V2 features
-        pxTokenV2.initializeV2(5, "Upgraded PX with enhanced features", 3600);
-
-        // Test V2 functionality
-        assertEq(pxTokenV2.version(), "2.0.0");
-        assertEq(pxTokenV2.maxMintPerTx(), 5);
-        assertEq(pxTokenV2.description(), "Upgraded PX with enhanced features");
-        assertEq(pxTokenV2.mintCooldown(), 3600);
+        // Verify V2 has same functionality as V1
+        assertEq(pxTokenV2.totalSupply(), preUpgradeSupply);
+        assertEq(pxTokenV2.puppersRemaining(), preUpgradeRemaining);
 
         console.log("  UUPS upgrade script validation successful");
         console.log("  Old implementation:", oldImplementation);
@@ -420,7 +363,7 @@ contract PXDeployment is Test {
         vm.prank(user2);
         dogToken.approve(address(pxToken), dogAmount);
 
-        // Test V1 minting
+        // Test V1 minting (V1 doesn't have mintingStarted check)
         vm.prank(user1);
         pxToken.mintPuppers(2, address(dogToken));
         assertEq(pxToken.balanceOf(user1), 2);
@@ -431,23 +374,18 @@ contract PXDeployment is Test {
         UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(implementationV2), "");
         vm.stopPrank();
 
-        // Initialize V2
-        PXV2 pxTokenV2 = PXV2(address(proxy));
-        pxTokenV2.initializeV2(3, "Enhanced PX Token", 1800);
-
         // 4. Test V2 functionality
+        PXV2 pxTokenV2 = PXV2(address(proxy));
         assertEq(pxTokenV2.balanceOf(user1), 2); // State preserved
 
-        // Test batch minting
-        vm.warp(10000); // Set to a known timestamp
-        vm.prank(user2);
-        pxTokenV2.batchMintPuppers(3);
-        assertEq(pxTokenV2.balanceOf(user2), 3);
+        // V2 requires startMinting() before minting can work
+        vm.prank(deployer);
+        pxTokenV2.startMinting();
 
-        // Test cooldown
-        assertFalse(pxTokenV2.canMint(user2)); // Should be on cooldown
-        vm.warp(10000 + 1800 + 1); // Clear cooldown - advance beyond the cooldown period
-        assertTrue(pxTokenV2.canMint(user2)); // Should be clear
+        // Test minting still works after upgrade
+        vm.prank(user2);
+        pxTokenV2.mintPuppers(2, address(dogToken));
+        assertEq(pxTokenV2.balanceOf(user2), 2);
 
         console.log("  Complete workflow validated");
         console.log("  V1 state preserved after upgrade");

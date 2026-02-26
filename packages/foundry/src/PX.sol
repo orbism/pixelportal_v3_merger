@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // OpenZeppelin Contracts v4.3.2 (token/ERC20/ERC20.sol)
 
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.30;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -10,7 +10,7 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import "./ERC721CustomUpgradeable.sol";
+import {ERC721CustomUpgradeable, ERC721MetadataURIQueryForNonexistentToken} from "./ERC721CustomUpgradeable.sol";
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
@@ -78,8 +78,8 @@ contract PX is
 
     mapping(address => uint256) public tokenLockAmounts;
     mapping(uint256 => TokenLock) public pixelLocks;
-    uint256 public INDEX_OFFSET;
-    uint256 public MAGIC_NULL;
+    uint256 public constant INDEX_OFFSET = 1000000;
+    uint256 public constant MAGIC_NULL = 0;
 
     uint256 public SHIBA_WIDTH;
     uint256 public SHIBA_HEIGHT;
@@ -93,7 +93,6 @@ contract PX is
     }
 
     mapping(uint256 => Reservation) public reservations;
-    mapping(uint256 => bool) public isReserved;
     uint256 public totalReserved;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -118,13 +117,12 @@ contract PX is
         __ReentrancyGuard_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, owner_);
+        _grantRole(BURN_FLAG_MANAGER_ROLE, owner_);
         _pause();
         require(DOG20Address != address(0));
         DOG20 = IERC20(DOG20Address);
 
         // https://docs.openzeppelin.com/upgrades-plugins/1.x/writing-upgradeable#avoid-initial-values-in-field-declarations
-        INDEX_OFFSET = 1000000;
-        MAGIC_NULL = 0;
         SHIBA_WIDTH = width_;
         SHIBA_HEIGHT = height_;
 
@@ -276,7 +274,7 @@ contract PX is
 
             uint256 pupper = indexToPupper[index];
 
-            if (isReserved[pupper]) {
+            if (isReserved(pupper)) {
                 attempts++;
                 continue;
             }
@@ -297,7 +295,7 @@ contract PX is
         for (uint256 i = INDEX_OFFSET; i < searchEnd; ++i) {
             uint256 pupper = indexToPupper[i] == MAGIC_NULL ? i : indexToPupper[i];
 
-            if (!isReserved[pupper]) {
+            if (!isReserved(pupper)) {
                 if (puppersRemaining == 0) revert NoPuppersRemaining();
                 if (puppersRemaining > type(uint256).max - INDEX_OFFSET) revert Overflow();
                 uint256 LAST_INDEX = INDEX_OFFSET + puppersRemaining - 1;
@@ -370,7 +368,7 @@ contract PX is
         SafeERC20.safeTransfer(token, _msgSender(), burnerAmount);
     }
 
-    function pupperToPixel(uint256 pupper) public view returns (uint256) {
+    function pupperToPixel(uint256 pupper) public pure returns (uint256) {
         if (pupper < INDEX_OFFSET) revert PupperIDbelowIndexOffset();
         return pupper - INDEX_OFFSET;
     }
@@ -396,7 +394,13 @@ contract PX is
         return bytes(baseURI).length > 0
             ? string(
                 abi.encodePacked(
-                    baseURI, "metadata-sh", Strings.toString(shard), "/", "metadata-", Strings.toString(tokenId), ".json"
+                    baseURI,
+                    "metadata-sh",
+                    Strings.toString(shard),
+                    "/",
+                    "metadata-",
+                    Strings.toString(tokenId),
+                    ".json"
                 )
             )
             : "";
@@ -420,12 +424,11 @@ contract PX is
             if (tokenId < INDEX_OFFSET) revert InvalidTokenID();
             if (tokenId >= INDEX_OFFSET + totalSupply) revert TokenIDOutOfRange();
             if (_exists(tokenId)) revert TokenAlreadyExists();
-            if (isReserved[tokenId]) revert TokenAlreadyReserved();
+            if (isReserved(tokenId)) revert TokenAlreadyReserved();
 
             _removeTokenFromAvailablePool(tokenId);
 
             reservations[tokenId] = Reservation({reservedFor: recipient, burnConfirmed: false});
-            isReserved[tokenId] = true;
             if (totalReserved >= type(uint256).max) revert TotalReservedOverflow();
             totalReserved += 1;
 
@@ -460,7 +463,7 @@ contract PX is
 
     function setBurnFlags(uint256[] calldata tokenIds, bool[] calldata burnStatuses)
         external
-        onlyRole(DEFAULT_ADMIN_ROLE)
+        onlyRole(BURN_FLAG_MANAGER_ROLE)
     {
         require(tokenIds.length == burnStatuses.length, "Arrays length mismatch");
         if (tokenIds.length == 0) revert EmptyArrays();
@@ -470,7 +473,7 @@ contract PX is
             uint256 tokenId = tokenIds[i];
             bool burnStatus = burnStatuses[i];
 
-            if (!isReserved[tokenId]) revert TokenNotReserved();
+            if (!isReserved(tokenId)) revert TokenNotReserved();
 
             reservations[tokenId].burnConfirmed = burnStatus;
             emit BurnFlagSet(tokenId, burnStatus);
@@ -480,7 +483,7 @@ contract PX is
     function claimReservedToken(uint256 tokenId, address tokenAddress) external whenNotPaused nonReentrant {
         if (tokenId < INDEX_OFFSET) revert InvalidTokenID();
         if (tokenId >= INDEX_OFFSET + totalSupply) revert TokenIDOutOfRange();
-        if (!isReserved[tokenId]) revert TokenNotReserved();
+        if (!isReserved(tokenId)) revert TokenNotReserved();
         if (tokenAddress == address(0)) revert InvalidTokenAddress();
 
         uint256 lockAmount = tokenLockAmounts[tokenAddress];
@@ -492,7 +495,6 @@ contract PX is
         if (_exists(tokenId)) revert TokenAlreadyClaimed();
 
         delete reservations[tokenId];
-        isReserved[tokenId] = false;
         if (totalReserved == 0) revert NoReservationsToClear();
         totalReserved -= 1;
 
@@ -506,39 +508,10 @@ contract PX is
         emit ReservedTokenClaimed(tokenId, _msgSender());
     }
 
-    function claimReservedToken(uint256 tokenId) external whenNotPaused nonReentrant {
-        if (tokenId < INDEX_OFFSET) revert InvalidTokenID();
-        if (tokenId >= INDEX_OFFSET + totalSupply) revert TokenIDOutOfRange();
-        if (!isReserved[tokenId]) revert TokenNotReserved();
-        if (address(DOG20) == address(0)) revert DOG20NotSet();
-
-        uint256 lockAmount = tokenLockAmounts[address(DOG20)];
-        if (lockAmount == 0) revert DOG20NotConfiguredForLocking();
-
-        Reservation memory reservation = reservations[tokenId];
-        if (reservation.reservedFor != _msgSender()) revert NotReservedForYou();
-        if (!reservation.burnConfirmed) revert BurnNotConfirmed();
-        if (_exists(tokenId)) revert TokenAlreadyClaimed();
-
-        delete reservations[tokenId];
-        isReserved[tokenId] = false;
-        if (totalReserved == 0) revert NoReservationsToClear();
-        totalReserved -= 1;
-
-        pixelLocks[tokenId] = TokenLock({token: address(DOG20), amount: lockAmount});
-
-        super._mint(_msgSender(), tokenId);
-
-        SafeERC20.safeTransferFrom(DOG20, _msgSender(), address(this), lockAmount);
-
-        emit TokenLocked(tokenId, address(DOG20), lockAmount);
-        emit ReservedTokenClaimed(tokenId, _msgSender());
-    }
-
     function getReservation(uint256 tokenId) external view returns (address reservedFor, bool burnConfirmed) {
         if (tokenId < INDEX_OFFSET) revert InvalidTokenID();
         if (tokenId >= INDEX_OFFSET + totalSupply) revert TokenIDOutOfRange();
-        if (!isReserved[tokenId]) revert TokenNotReserved();
+        if (!isReserved(tokenId)) revert TokenNotReserved();
         Reservation memory reservation = reservations[tokenId];
         return (reservation.reservedFor, reservation.burnConfirmed);
     }
@@ -555,7 +528,7 @@ contract PX is
         if (user == address(0)) return false;
         if (tokenId < INDEX_OFFSET) return false;
         if (tokenId >= INDEX_OFFSET + totalSupply) return false;
-        if (!isReserved[tokenId]) return false;
+        if (!isReserved(tokenId)) return false;
         if (_exists(tokenId)) return false;
 
         Reservation memory reservation = reservations[tokenId];
@@ -575,7 +548,7 @@ contract PX is
 
         // First pass: count matching reservations
         for (uint256 i = INDEX_OFFSET; i < searchEnd && count < limit; ++i) {
-            if (isReserved[i] && reservations[i].reservedFor == user) {
+            if (isReserved(i) && reservations[i].reservedFor == user) {
                 count++;
             }
         }
@@ -587,7 +560,7 @@ contract PX is
         // Second pass: populate arrays
         uint256 index = 0;
         for (uint256 i = INDEX_OFFSET; i < searchEnd && index < count; ++i) {
-            if (isReserved[i] && reservations[i].reservedFor == user) {
+            if (isReserved(i) && reservations[i].reservedFor == user) {
                 tokenIds[index] = i;
                 burnConfirmed[index] = reservations[i].burnConfirmed;
                 index++;
@@ -631,5 +604,11 @@ contract PX is
         return super.supportsInterface(interfaceId);
     }
 
-    uint256[45] private __gap;
+    bytes32 public constant BURN_FLAG_MANAGER_ROLE = keccak256("BURN_FLAG_MANAGER_ROLE");
+
+    function isReserved(uint256 tokenId) public view returns (bool) {
+        return reservations[tokenId].reservedFor != address(0);
+    }
+
+    uint256[44] private __gap;
 }

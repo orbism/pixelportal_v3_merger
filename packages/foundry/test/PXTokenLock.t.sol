@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.30;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {PX} from "../src/PX.sol";
 import {MockDOG20} from "./mocks/MockDOG20.sol";
-import {TestUtils} from "./utils/TestUtils.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 // Import custom errors
 import {InvalidTokenAddress, TokenNotConfiguredForLocking, NoLockFoundForPixel} from "../src/PX.sol";
@@ -118,10 +116,10 @@ contract PXTokenLockTest is Test {
         px.setTokenLockAmount(address(token2), TOKEN2_LOCK_AMOUNT);
 
         // Give users some tokens
-        token1.transfer(addr1, 100000e18);
-        token1.transfer(addr2, 100000e18);
-        token2.transfer(addr1, 100000e18);
-        token2.transfer(addr2, 100000e18);
+        require(token1.transfer(addr1, 100000e18), "Transfer failed");
+        require(token1.transfer(addr2, 100000e18), "Transfer failed");
+        require(token2.transfer(addr1, 100000e18), "Transfer failed");
+        require(token2.transfer(addr2, 100000e18), "Transfer failed");
     }
 
     function testSetTokenLockAmount() public {
@@ -548,8 +546,8 @@ contract PXTokenLockTest is Test {
         uint256 TOKEN3_LOCK_AMOUNT = 2000e18;
 
         // Give users some token3
-        token3.transfer(addr1, 100000e18);
-        token3.transfer(addr2, 100000e18);
+        require(token3.transfer(addr1, 100000e18), "Transfer failed");
+        require(token3.transfer(addr2, 100000e18), "Transfer failed");
 
         // Configure token3
         px.setTokenLockAmount(address(token3), TOKEN3_LOCK_AMOUNT);

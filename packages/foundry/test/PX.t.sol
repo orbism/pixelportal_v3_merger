@@ -1,34 +1,16 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {PX} from "../src/PX.sol";
-import {PXV2} from "../src/PXV2.sol";
 import {MockDOG20} from "./mocks/MockDOG20.sol";
 import {TestUtils} from "./utils/TestUtils.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {
-    NoPuppersRemainingToMint,
-    PupperIsMagic,
-    PupperIsNotYours,
-    CannotExceedTotalSupply,
-    NoPuppersRemainingForMigration,
-    TokenNotAvailableForMinting,
-    NoPuppersRemainingForPoolRemoval,
-    NoTokensAvailableToRemoveFromPool,
-    NonPositiveQuantity,
     NoPuppersRemaining,
-    InvalidTokenAddress,
-    TokenNotConfiguredForLocking,
-    Overflow,
     EmptyPuppers,
-    NoLockFoundForPixel,
-    PupperIDbelowIndexOffset,
-    InvalidSHIBAWidth,
-    TokenIDBelowIndexOffset,
     ArraysLengthMismatch,
     EmptyArrays,
     BatchTooLarge,
@@ -36,34 +18,8 @@ import {
     InvalidTokenID,
     TokenIDOutOfRange,
     TokenAlreadyExists,
-    TokenAlreadyReserved,
-    TotalReservedOverflow,
-    TokenNotReserved,
-    NotReservedForYou,
-    BurnNotConfirmed,
-    TokenAlreadyClaimed,
-    NoReservationsToClear,
-    DOG20NotSet,
-    DOG20NotConfiguredForLocking,
-    InvalidLimit,
-    NoAvailableTokensToMint
+    TokenAlreadyReserved
 } from "../src/PX.sol";
-
-import {
-    ERC721BalanceQueryForZeroAddress,
-    ERC721OwnerQueryForNonexistentToken,
-    ERC721MetadataURIQueryForNonexistentToken,
-    ERC721ApprovalToCurrentOwner,
-    ERC721ApprovedQueryForNonexistentToken,
-    ERC721TransferCallerNotOwnerNorApproved,
-    ERC721TransferToNonERC721ReceiverImplementer,
-    ERC721OperatorQueryForNonexistentToken,
-    ERC721MintToZeroAddress,
-    ERC721TokenAlreadyMinted,
-    ERC721TransferOfTokenNotOwn,
-    ERC721TransferToZeroAddress,
-    ERC721ApproveToCaller
-} from "../src/ERC721CustomUpgradeable.sol";
 
 /**
  * @title PXTest

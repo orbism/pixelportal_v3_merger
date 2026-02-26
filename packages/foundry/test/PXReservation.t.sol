@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
 import {PX} from "../src/PX.sol";
@@ -91,6 +91,26 @@ contract PXReservationTest is Test {
         assertFalse(burnConfirmed1);
     }
 
+    function test_TotalSupplyWithAndWithoutReservations() public {
+        uint256 expectedTotalSupply = 1000 * 1000;
+        assertEq(px.totalSupply(), expectedTotalSupply);
+
+        uint256[] memory tokenIds = new uint256[](3);
+        address[] memory recipients = new address[](3);
+
+        for (uint256 i = 0; i < 3; i++) {
+            tokenIds[i] = INDEX_OFFSET + i + 1;
+            recipients[i] = user1;
+        }
+
+        vm.prank(owner);
+        px.reserveTokensForMigration(tokenIds, recipients);
+
+        assertEq(px.totalSupply(), expectedTotalSupply);
+        assertEq(px.totalReserved(), 3);
+        assertEq(px.puppersRemaining(), expectedTotalSupply - 3);
+    }
+
     function test_SetBurnFlags() public {
         // First reserve tokens
         uint256[] memory tokenIds = new uint256[](2);
@@ -152,7 +172,7 @@ contract PXReservationTest is Test {
         emit ReservedTokenClaimed(tokenId, user1);
 
         vm.prank(user1);
-        px.claimReservedToken(tokenId);
+        px.claimReservedToken(tokenId, address(dog20));
 
         // Verify claim
         assertEq(px.ownerOf(tokenId), user1);
@@ -179,7 +199,7 @@ contract PXReservationTest is Test {
         // Should fail to claim
         vm.expectRevert(abi.encodeWithSelector(BurnNotConfirmed.selector));
         vm.prank(user1);
-        px.claimReservedToken(tokenId);
+        px.claimReservedToken(tokenId, address(dog20));
     }
 
     function test_CannotClaimWrongUser() public {
@@ -206,7 +226,7 @@ contract PXReservationTest is Test {
         // Wrong user tries to claim
         vm.expectRevert(abi.encodeWithSelector(NotReservedForYou.selector));
         vm.prank(user2);
-        px.claimReservedToken(tokenId);
+        px.claimReservedToken(tokenId, address(dog20));
     }
 
     function test_ReservationWorkflow() public {
@@ -250,10 +270,10 @@ contract PXReservationTest is Test {
         px.unpause();
 
         vm.prank(user1);
-        px.claimReservedToken(tokenIds[0]);
+        px.claimReservedToken(tokenIds[0], address(dog20));
 
         vm.prank(user1);
-        px.claimReservedToken(tokenIds[2]);
+        px.claimReservedToken(tokenIds[2], address(dog20));
 
         // Verify final state
         assertEq(px.ownerOf(tokenIds[0]), user1);
@@ -381,11 +401,11 @@ contract PXReservationTest is Test {
         px.unpause();
 
         vm.prank(user1);
-        px.claimReservedToken(tokenIds[0]);
+        px.claimReservedToken(tokenIds[0], address(dog20));
 
         vm.expectRevert(abi.encodeWithSelector(TokenNotReserved.selector));
         vm.prank(user1);
-        px.claimReservedToken(tokenIds[0]);
+        px.claimReservedToken(tokenIds[0], address(dog20));
     }
 
     function test_PauseRequirements() public {
@@ -423,7 +443,7 @@ contract PXReservationTest is Test {
 
         // Test: Claims can only be made while unpaused
         vm.prank(user1);
-        px.claimReservedToken(tokenIds[0]); // Should work while unpaused
+        px.claimReservedToken(tokenIds[0], address(dog20)); // Should work while unpaused
 
         // Test: Cannot claim while paused
         vm.prank(owner);
@@ -440,14 +460,14 @@ contract PXReservationTest is Test {
         // Try to claim while paused - should fail
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
         vm.prank(user2);
-        px.claimReservedToken(tokenIds2[0]);
+        px.claimReservedToken(tokenIds2[0], address(dog20));
 
         // Unpause and claim should work
         vm.prank(owner);
         px.unpause();
 
         vm.prank(user2);
-        px.claimReservedToken(tokenIds2[0]); // Should work
+        px.claimReservedToken(tokenIds2[0], address(dog20)); // Should work
     }
 
     function test_ClaimPaymentAndClearing() public {
@@ -487,7 +507,7 @@ contract PXReservationTest is Test {
 
         // Claim the token
         vm.prank(user1);
-        px.claimReservedToken(tokenId);
+        px.claimReservedToken(tokenId, address(dog20));
 
         // Verify payment - should match regular mint cost
         assertEq(dog20.balanceOf(user1), initialDogBalance - expectedPayment);
@@ -528,11 +548,10 @@ contract PXReservationTest is Test {
 
         // Record balances before claim
         uint256 user1BalanceBefore = dog20.balanceOf(user1);
-        uint256 contractBalanceBefore = dog20.balanceOf(address(px));
 
         // User1 claims reserved token
         vm.prank(user1);
-        px.claimReservedToken(claimTokenId);
+        px.claimReservedToken(claimTokenId, address(dog20));
 
         uint256 claimCost = user1BalanceBefore - dog20.balanceOf(user1);
 
@@ -574,12 +593,12 @@ contract PXReservationTest is Test {
 
         // First claim should work
         vm.prank(user1);
-        px.claimReservedToken(tokenId);
+        px.claimReservedToken(tokenId, address(dog20));
 
         // Second claim should fail - reservation cleared
         vm.expectRevert(abi.encodeWithSelector(TokenNotReserved.selector));
         vm.prank(user1);
-        px.claimReservedToken(tokenId);
+        px.claimReservedToken(tokenId, address(dog20));
     }
 
     function test_ClaimInsufficientFunds() public {
@@ -606,14 +625,14 @@ contract PXReservationTest is Test {
         uint256 smallBalance = 1000; // Much less than DOG_TO_PIXEL_SATOSHIS
 
         vm.prank(user1);
-        dog20.transfer(address(0xdead), currentBalance - smallBalance);
+        require(dog20.transfer(address(0xdead), currentBalance - smallBalance), "Transfer failed");
 
         assertLt(dog20.balanceOf(user1), DOG_TO_PIXEL_SATOSHIS);
 
         // Claim should fail due to insufficient funds
         vm.expectRevert(); // Will revert with ERC20InsufficientBalance or similar
         vm.prank(user1);
-        px.claimReservedToken(tokenId);
+        px.claimReservedToken(tokenId, address(dog20));
 
         // Verify reservation still exists (not cleared due to failed claim)
         assertTrue(px.isReserved(tokenId));

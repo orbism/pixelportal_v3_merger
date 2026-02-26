@@ -1,26 +1,30 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.30;
 
 import {Script, console} from "forge-std/Script.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {PX} from "../src/PX.sol";
-import {DeployConfig} from "./DeployConfig.sol";
 
 /**
  * @title DebugProxyDeploy
  * @dev Debug script to test proxy deployment without CREATE2
+ *
+ * All configuration is read from environment variables.
  */
 contract DebugProxyDeploy is Script {
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
 
-        // Read token address and lock amount from environment
+        // Read all configuration from environment
         address dog20Address = vm.envAddress("DOG20_TOKEN_ADDRESS");
         uint256 defaultLockAmount = vm.envUint("DEFAULT_LOCK_AMOUNT");
-
-        // Get network configuration
-        DeployConfig.NetworkConfig memory config = DeployConfig.getConfigForChainId(block.chainid, dog20Address);
+        string memory tokenName = vm.envString("TOKEN_NAME");
+        string memory tokenSymbol = vm.envString("TOKEN_SYMBOL");
+        string memory baseUri = vm.envString("BASE_URI");
+        uint256 shibaWidth = vm.envUint("SHIBA_WIDTH");
+        uint256 shibaHeight = vm.envUint("SHIBA_HEIGHT");
+        address devFeeAddress = vm.envAddress("DEV_FEE_ADDRESS");
 
         console.log("=== DEBUG PROXY DEPLOYMENT ===");
         console.log("Deployer:", deployer);
@@ -36,13 +40,13 @@ contract DebugProxyDeploy is Script {
         // Prepare initialization data
         bytes memory initData = abi.encodeWithSelector(
             PX.__PX_init.selector,
-            config.tokenName,
-            config.tokenSymbol,
-            config.dog20Address,
-            config.ipfsUri,
-            config.shibaWidth,
-            config.shibaHeight,
-            config.devFeeAddress,
+            tokenName,
+            tokenSymbol,
+            dog20Address,
+            baseUri,
+            shibaWidth,
+            shibaHeight,
+            devFeeAddress,
             deployer // Pass deployer as owner
         );
 

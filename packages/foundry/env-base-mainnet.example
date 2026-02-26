@@ -1,0 +1,50 @@
+# Use this as a starting point for Base mainnet config.
+
+# PX Deployment Configuration - Base Mainnet
+# Chain ID: 8453
+
+# Required: Network identifier (used to verify correct .env is loaded)
+NETWORK_NAME=base-mainnet
+
+# Required: RPC endpoint
+RPC_URL=https://base-mainnet.infura.io/v3/UPDATE_VALUE_HERE
+
+# Required: Deployer private key
+# (DON'T PUT IT ON THE FILESYSTEM!!!)
+#PRIVATE_KEY=
+
+# Optional: for contract verification on BaseScan
+#ETHERSCAN_API_KEY=UPDATE_VALUE_HERE
+
+# Required: DOG20 token contract address
+DOG20_TOKEN_ADDRESS=0xBAac2B4491727D78D2b78815144570b9f2Fe8899
+
+# Required: Lock amount in wei (1000 DOG = 1000000000000000000000)
+DEFAULT_LOCK_AMOUNT=55240000000000000000000
+
+# Required: Token metadata
+TOKEN_NAME="Pixels of The Doge NFT"
+TOKEN_SYMBOL=DOGEPIXEL
+
+# Required: Base URI for token metadata
+BASE_URI=https://therealdoge.mypinata.cloud/ipfs/QmSjRs4dH5q2wV5mqY4ujpXNQByYyvf2A8pk6sUXgCA3QQ/
+
+# Required: Image dimensions (width x height = total supply)
+SHIBA_WIDTH=640
+SHIBA_HEIGHT=480
+
+# Required: Dev fee recipient address (receives 1% of burned token collateral)
+# This is not actually used anymore but kept here in case it comes back.
+# I just set it to the deployer EOA.
+DEV_FEE_ADDRESS=0xE8CBd9AC7C7988aD4119707C8B6Ce5844125D246
+
+# Deployed proxy contract addresse
+PROXY_ADDRESS=0x356C8f8Ed28B6A0386a948AaD7acA06799d6bf34
+
+# Recommend commenting out every time this gets upgraded and add a new line for the new implementation.
+IMPLEMENTATION_ADDRESS=UPDATE_HERE_WHEN_DEPLOYED
+
+# This is your multisig Safe address.
+MULTISIG=
+
+SAFE_API_KEY=UPDATE_VALUE_HERE

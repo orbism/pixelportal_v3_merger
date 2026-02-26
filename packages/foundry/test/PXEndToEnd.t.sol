@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
-import {Vm} from "forge-std/Vm.sol";
 import {PX} from "../src/PX.sol";
 import {MockDOG20} from "./mocks/MockDOG20.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
@@ -115,7 +114,7 @@ contract PXEndToEnd is Test {
         dogToken.approve(address(pxToken), type(uint256).max);
     }
 
-    function test_InitialState() public {
+    function test_InitialState() public view {
         // Verify initial contract state
         assertEq(pxToken.name(), "Pixel Token");
         assertEq(pxToken.symbol(), "PX");
@@ -216,7 +215,7 @@ contract PXEndToEnd is Test {
         // Users claim their reserved tokens
         for (uint256 i = 0; i < PRE_ALLOCATED_COUNT; i++) {
             vm.prank(preAllocAddresses[i]);
-            pxToken.claimReservedToken(tokenIds[i]);
+            pxToken.claimReservedToken(tokenIds[i], address(dogToken));
         }
 
         // Verify all tokens were claimed
@@ -248,7 +247,7 @@ contract PXEndToEnd is Test {
         _verifyFinalState();
     }
 
-    function _moveToPreAllocationPhase() internal {
+    function _moveToPreAllocationPhase() internal view {
         // Contract starts paused, which is perfect for pre-allocation
         assertTrue(pxToken.paused());
     }
@@ -372,7 +371,7 @@ contract PXEndToEnd is Test {
         _verifyInternalConsistency();
     }
 
-    function _verifyFinalState() internal {
+    function _verifyFinalState() internal view {
         console.log("Verifying final state...");
 
         // Verify total supply and distribution
@@ -411,7 +410,7 @@ contract PXEndToEnd is Test {
         console.log("  Minter4 balance:", pxToken.balanceOf(minter4));
     }
 
-    function _verifyAllTokenOwnership() internal {
+    function _verifyAllTokenOwnership() internal view {
         console.log("Verifying all token ownership...");
 
         uint256 ownedTokens = 0;
@@ -435,10 +434,9 @@ contract PXEndToEnd is Test {
 
                     // Check minter addresses
                     if (!isValidOwner) {
-                        isValidOwner = (
-                            tokenOwner == minter1 || tokenOwner == minter2 || tokenOwner == minter3
-                                || tokenOwner == minter4
-                        );
+                        isValidOwner =
+                        (tokenOwner == minter1 || tokenOwner == minter2 || tokenOwner == minter3
+                                || tokenOwner == minter4);
                     }
 
                     assertTrue(isValidOwner, "Token owned by unexpected address");
@@ -462,7 +460,7 @@ contract PXEndToEnd is Test {
         console.log("  All token ownership verified, total owned:", ownedTokens);
     }
 
-    function _verifyInternalConsistency() internal {
+    function _verifyInternalConsistency() internal view {
         // Verify that puppersRemaining + minted tokens = totalSupply
         uint256 totalMinted = 0;
 

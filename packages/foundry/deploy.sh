@@ -35,13 +35,17 @@ if [ ! -f ".env" ]; then
     print_status "Please create a .env file with the following variables:"
     echo "PRIVATE_KEY=your_private_key_here"
     echo "RPC_URL=your_rpc_url_here"
-    echo "ETHERSCAN_API_KEY=your_etherscan_api_key_here (optional, for verification)"
+    echo "DOG20_TOKEN_ADDRESS=0x...  # the DOG token contract address"
+    echo "DEFAULT_LOCK_AMOUNT=1000000000000000000000  # lock amount in wei"
+    echo "ETHERSCAN_API_KEY=your_etherscan_api_key_here  # optional, for verification"
     exit 1
 fi
 
 # Load environment variables from .env file
 print_status "Loading environment variables from .env file..."
-export $(grep -v '^#' .env | xargs)
+set -a
+source .env
+set +a
 
 # Validate required environment variables
 if [ -z "$PRIVATE_KEY" ]; then
@@ -59,26 +63,8 @@ print_status "Deployment Configuration:"
 echo "  RPC URL: $RPC_URL"
 echo "  Deployer Address: $(cast wallet address $PRIVATE_KEY 2>/dev/null || echo "Unable to derive address")"
 
-# Default deployment method
-DEPLOYMENT_METHOD=${1:-"uups"}
-
-case $DEPLOYMENT_METHOD in
-    "uups")
-        SCRIPT_PATH="script/DeployPXUUPS.s.sol:DeployPXUUPS"
-        print_status "Using UUPS deployment method (recommended)"
-        ;;
-    "admin")
-        SCRIPT_PATH="script/DeployPXWithAdmin.s.sol:DeployPXWithAdmin"
-        print_status "Using TransparentProxy with ProxyAdmin deployment method"
-        ;;
-    *)
-        print_error "Invalid deployment method: $DEPLOYMENT_METHOD"
-        print_status "Usage: ./deploy.sh [uups|admin]"
-        print_status "  uups  - Deploy using UUPS pattern (default, recommended)"
-        print_status "  admin - Deploy using TransparentProxy with ProxyAdmin"
-        exit 1
-        ;;
-esac
+SCRIPT_PATH="script/DeployPXUUPS.s.sol:DeployPXUUPS"
+print_status "Deploying PX using UUPS proxy pattern"
 
 # Check if forge is installed
 if ! command -v forge &> /dev/null; then

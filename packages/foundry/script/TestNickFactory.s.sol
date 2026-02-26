@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.30;
 
 import {Script, console} from "forge-std/Script.sol";
 
@@ -40,7 +40,6 @@ contract TestNickFactory is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         address NICK_FACTORY = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
-        ICreate2Factory factory = ICreate2Factory(NICK_FACTORY);
 
         console.log("Testing Nick's factory at:", NICK_FACTORY);
 
@@ -57,6 +56,8 @@ contract TestNickFactory is Script {
 
         if (success) {
             // Nick's factory returns the deployed address directly in return data
+            // casting to 'bytes32' is safe because returnData from CREATE2 factory is padded address
+            // forge-lint: disable-next-line(unsafe-typecast)
             address deployedAddr = address(uint160(uint256(bytes32(returnData))));
             console.log("SUCCESS: SimpleDummy deployed at:", deployedAddr);
 
@@ -92,6 +93,8 @@ contract TestNickFactory is Script {
 
         if (success2) {
             // Nick's factory returns the deployed address directly in return data
+            // casting to 'bytes32' is safe because returnData from CREATE2 factory is padded address
+            // forge-lint: disable-next-line(unsafe-typecast)
             address deployedAddr = address(uint160(uint256(bytes32(returnData2))));
             console.log("SUCCESS: DummyContract deployed at:", deployedAddr);
 

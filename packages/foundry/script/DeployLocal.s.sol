@@ -9,13 +9,13 @@ import {MockDOG20} from "../test/mocks/MockDOG20.sol";
 /**
  * @title DeployLocal
  * @dev Simple deployment script for local Anvil testing
- * 
+ *
  * Deploys:
  * 1. MockDOG20 token
  * 2. PX implementation
  * 3. ERC1967Proxy pointing to PX
  * 4. Configures token lock amount
- * 
+ *
  * Usage:
  * forge script script/DeployLocal.s.sol:DeployLocal --rpc-url http://localhost:1337 --broadcast --private-key <key>
  */
@@ -50,14 +50,14 @@ contract DeployLocal is Script {
         console.log("\n3. Preparing proxy initialization...");
         bytes memory initData = abi.encodeWithSelector(
             PX.__PX_init.selector,
-            "Doge Pixels",           // name
-            "PX",                     // symbol
-            address(dog20),           // DOG20 address
-            "ipfs://local-test/",     // ipfsUri
-            SHIBA_WIDTH,              // width
-            SHIBA_HEIGHT,             // height
-            deployer,                 // devFeeAddress
-            deployer                  // owner
+            "Doge Pixels", // name
+            "PX", // symbol
+            address(dog20), // DOG20 address
+            "ipfs://local-test/", // ipfsUri
+            SHIBA_WIDTH, // width
+            SHIBA_HEIGHT, // height
+            deployer, // devFeeAddress
+            deployer // owner
         );
 
         // 4. Deploy proxy
