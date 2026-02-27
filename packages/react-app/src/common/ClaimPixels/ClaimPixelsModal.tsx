@@ -21,7 +21,7 @@ const ClaimPixelsModal = observer(({ isOpen, onClose, onSuccess, onCompleteClose
       onClose={onClose}
       title="Claim Your V3 Pixels"
       description="Burn v1/v2 pixels and claim them in v3"
-      size="lg"
+      size="xl"
     >
       <Box>
         <ClaimPixelsDialog store={store} onSuccess={onSuccess} onCompleteClose={onCompleteClose} />

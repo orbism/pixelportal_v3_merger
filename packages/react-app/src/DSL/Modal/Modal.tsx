@@ -103,7 +103,7 @@ const Modal = ({
                 </Box>
               </Box>
             </Flex>
-            <Box __css={chakraStyles.body}>
+            <Box __css={chakraStyles.body} maxH="70vh" overflowY="auto">
               {title && (
                 <Box __css={chakraStyles.title}>
                   <Typography variant={TVariant.PresStart18}>{title}</Typography>

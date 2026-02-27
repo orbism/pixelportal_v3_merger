@@ -92,10 +92,10 @@ const FooterDrawer = observer(() => {
                 <Button size="xs" onClick={() => { AppStore.guide.startGuide(); setIsOpen(false); }}>
                   Run Interactive User Guide
                 </Button>
-                <Button size="xs" onClick={() => setIsBugReportOpen(true)}>
+                <Button size="xs" onClick={() => { setIsBugReportOpen(true); setIsOpen(false); }}>
                   Find a bug?!
                 </Button>
-                <Button size="xs" onClick={() => setIsCreditsOpen(true)}>
+                <Button size="xs" onClick={() => { setIsCreditsOpen(true); setIsOpen(false); }}>
                   Credits
                 </Button>
               </HStack>

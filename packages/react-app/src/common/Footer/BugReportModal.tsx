@@ -1,4 +1,4 @@
-import { Box, VStack, Text, useColorMode } from "@chakra-ui/react";
+import { Box, Flex, VStack, Text, useColorMode } from "@chakra-ui/react";
 import { useState } from "react";
 import Modal from "../../DSL/Modal/Modal";
 import Form from "../../DSL/Form/Form";
@@ -47,7 +47,7 @@ const BugReportModal = ({ isOpen, onClose }: BugReportModalProps) => {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Bug Report" size="lg">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Bug Report" size="xl">
       {view === "form" && (
         <Form onSubmit={handleSubmit}>
           <VStack spacing={3} align="stretch">
@@ -63,9 +63,9 @@ const BugReportModal = ({ isOpen, onClose }: BugReportModalProps) => {
               validate={required()}
               rows={5}
             />
-            <Box pt={2}>
-              <Submit label="Send Report" />
-            </Box>
+            <Flex pt={2} justifyContent="center">
+              <Submit label="Send Report" w="full" />
+            </Flex>
           </VStack>
         </Form>
       )}

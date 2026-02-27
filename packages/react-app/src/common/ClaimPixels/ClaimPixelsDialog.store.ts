@@ -201,11 +201,15 @@ class ClaimPixelsDialogStore extends Reactionable(
     return `${STORAGE_KEY_PREFIX}${address.toLowerCase()}`;
   }
 
-  private saveToStorage() {
+  private saveToStorage(extra?: { claimed: true; claimedIds: number[] }) {
     const key = this.getStorageKey();
     if (!key) return;
     try {
-      const value = { burnedMainnet: this.burnedMainnet, burnedBase: this.burnedBase };
+      const value = {
+        burnedMainnet: this.burnedMainnet,
+        burnedBase: this.burnedBase,
+        ...(extra ?? {}),
+      };
       localStorage.setItem(key, JSON.stringify(value));
       log("Saved to storage:", value);
     } catch (e) {
@@ -213,7 +217,12 @@ class ClaimPixelsDialogStore extends Reactionable(
     }
   }
 
-  private loadFromStorage(): { burnedMainnet: number[]; burnedBase: number[] } | null {
+  private loadFromStorage(): {
+    burnedMainnet: number[];
+    burnedBase: number[];
+    claimed?: boolean;
+    claimedIds?: number[];
+  } | null {
     const key = this.getStorageKey();
     if (!key) return null;
     try {
@@ -299,12 +308,15 @@ class ClaimPixelsDialogStore extends Reactionable(
         this.pushNavigation(ClaimPixelsModalView.WaitingForConfirmation);
         this.startPollingForBurnConfirmation();
       } else {
-        // Check if all eligible pixels are already owned on V3 (fully migrated)
+        // Primary check: local "claimed" marker written after successful claim
+        const localClaimed = stored?.claimed === true;
+        // Fallback: server-indexed V3 ownership (works cross-device if transfer events indexed)
         const allEligible = [...this.eligibility.mainnet, ...this.eligibility.base];
         const ownedOnV3 = new Set(AppStore.web3.puppersOwned);
-        const alreadyClaimed = allEligible.length > 0 && allEligible.every(id => ownedOnV3.has(id));
-        if (alreadyClaimed) {
-          log("route: AlreadyClaimed (all eligible pixels already owned on V3)");
+        const serverClaimed = allEligible.length > 0 && allEligible.every(id => ownedOnV3.has(id));
+
+        if (localClaimed || serverClaimed) {
+          log("route: AlreadyClaimed", localClaimed ? "(local flag)" : "(server ownership)");
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.AlreadyClaimed);
         } else {
@@ -673,7 +685,7 @@ class ClaimPixelsDialogStore extends Reactionable(
       this.destroyNavigation();
       this.pushNavigation(ClaimPixelsModalView.Complete);
       showSuccessToast(`Successfully claimed ${claimedIds.length} pixel(s)!`);
-      this.clearStorage();
+      this.saveToStorage({ claimed: true, claimedIds: claimedIds });
     } else if (claimedIds.length > 0) {
       runInAction(() => {
         this.claimedPixels = claimedIds;

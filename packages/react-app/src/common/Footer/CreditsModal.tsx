@@ -44,7 +44,7 @@ const CreditsSection = ({ title, entries }: { title: string; entries: { name: st
 
 const CreditsModal = ({ isOpen, onClose }: CreditsModalProps) => {
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Credits" size="md">
+    <Modal isOpen={isOpen} onClose={onClose} title="Credits" size="xl">
       <VStack spacing={5} align="stretch" py={2}>
         <CreditsSection
           title="Direction"

@@ -51,6 +51,14 @@ const ModalStyle = {
         maxWidth: "36rem",
       },
     },
+    xl: {
+      container: {
+        maxWidth: "42rem",
+      },
+      drop: {
+        maxWidth: "42rem",
+      },
+    },
   },
 };
 
