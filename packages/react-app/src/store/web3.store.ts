@@ -206,12 +206,18 @@ class Web3Store extends Reactionable(Web3providerStore) {
   async connect(signer: ethers.Signer, network: Chain, provider: ethers.providers.BaseProvider) {
     try {
       await super.connect(signer, network, provider);
-      this.connectToContracts(this.signer!);
-      await this.debugContractAddresses();
-      await this.errorGuardContracts();
-      this.cowStore.connect(this.signer!);
-      this.refreshDogBalance();
-      this.refreshPupperBalance();
+
+      // Only rebind contracts when on the target chain.
+      // When temporarily on L1 (e.g. Sepolia for V1 burn), keep existing
+      // PX/DOG20 contract bindings so reads against Base still work.
+      if (network.id === this.targetChainId) {
+        this.connectToContracts(this.signer!);
+        await this.debugContractAddresses();
+        await this.errorGuardContracts();
+        this.cowStore.connect(this.signer!);
+        this.refreshDogBalance();
+        this.refreshPupperBalance();
+      }
     } catch (e) {
       console.error(e);
       Sentry.captureException(e);

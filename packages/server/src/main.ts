@@ -3,8 +3,7 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
-  console.error('[FATAL] Unhandled rejection:', reason);
-  process.exit(1);
+  console.error('[ERROR] Unhandled rejection (non-fatal):', reason);
 });
 
 console.log('[BOOT] Process started, loading modules...');

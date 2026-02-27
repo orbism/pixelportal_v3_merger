@@ -520,10 +520,10 @@ class ClaimPixelsDialogStore extends Reactionable(
 
   startPollingForBurnConfirmation() {
     this.pollCount = 0;
-    log("poll: starting (10s interval)");
+    log("poll: starting (30s interval)");
     this.pollIntervalId = setInterval(async () => {
       await this.checkBurnConfirmation();
-    }, 10000);
+    }, 30000);
     this.checkBurnConfirmation();
   }
 
