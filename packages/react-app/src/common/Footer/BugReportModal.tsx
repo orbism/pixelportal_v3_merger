@@ -47,7 +47,7 @@ const BugReportModal = ({ isOpen, onClose }: BugReportModalProps) => {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Bug Report" size="xl">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Bug Report" size="2xl">
       {view === "form" && (
         <Form onSubmit={handleSubmit}>
           <VStack spacing={3} align="stretch">

@@ -59,6 +59,14 @@ const ModalStyle = {
         maxWidth: "42rem",
       },
     },
+    "2xl": {
+      container: {
+        maxWidth: "48rem",
+      },
+      drop: {
+        maxWidth: "48rem",
+      },
+    },
   },
 };
 
