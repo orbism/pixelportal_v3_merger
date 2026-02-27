@@ -47,6 +47,9 @@ const ClaimPixelsDialog = observer(({ store, onSuccess, onCompleteClose }: Claim
       {store.currentView === ClaimPixelsModalView.Complete && (
         <Complete store={store} txHash={store.txHash} onClose={onCompleteClose} />
       )}
+      {store.currentView === ClaimPixelsModalView.AlreadyClaimed && (
+        <AlreadyClaimed store={store} onClose={onCompleteClose} />
+      )}
     </>
   );
 });
@@ -587,5 +590,61 @@ const Complete = observer(
     );
   },
 );
+
+// ============================================
+// Already Claimed
+// ============================================
+const AlreadyClaimed = observer(({ store, onClose }: { store: ClaimPixelsDialogStore; onClose: () => void }) => {
+  const { colorMode } = useColorMode();
+  const allEligible = [...store.eligibility.mainnet, ...store.eligibility.base];
+
+  return (
+    <VStack spacing={6} align="stretch">
+      <Box textAlign="center">
+        <Typography variant={TVariant.PresStart20} block>
+          Already Claimed!
+        </Typography>
+        <Typography variant={TVariant.ComicSans14} block mt={2}>
+          You've already claimed your V3 pixels.
+        </Typography>
+      </Box>
+
+      <Alert status="success" borderRadius="md">
+        <AlertIcon />
+        <Typography variant={TVariant.ComicSans14}>
+          All {allEligible.length} pixel(s) from your V1/V2 migration have been successfully claimed on V3.
+        </Typography>
+      </Alert>
+
+      {allEligible.length > 0 && (
+        <Box
+          bg={lightOrDarkMode(colorMode, "green.50", "green.900")}
+          p={4}
+          borderRadius="md"
+          border="1px solid"
+          borderColor={lightOrDarkMode(colorMode, "green.300", "green.600")}
+        >
+          <Typography variant={TVariant.ComicSans12} block mb={3} fontWeight="bold">
+            Your claimed pixels:
+          </Typography>
+          <Box maxH="200px" overflowY="auto">
+            <SimpleGrid columns={{ base: 4, md: 6 }} spacing={2}>
+              {allEligible.map(tokenId => (
+                <Box key={tokenId} textAlign="center">
+                  <PixelPane size="xs" pupper={tokenId} />
+                  <Typography variant={TVariant.PresStart8}>#{tokenId}</Typography>
+                </Box>
+              ))}
+            </SimpleGrid>
+          </Box>
+        </Box>
+      )}
+
+      <Flex justifyContent="center" mt={2}>
+        <Button onClick={onClose}>Close</Button>
+      </Flex>
+    </VStack>
+  );
+});
 
 export default ClaimPixelsDialog;

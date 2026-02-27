@@ -19,6 +19,7 @@ export enum ClaimPixelsModalView {
   ReadyToClaim = "ready_to_claim",
   ClaimingPixels = "claiming",
   Complete = "complete",
+  AlreadyClaimed = "already_claimed",
 }
 
 export type BurnNetwork = "mainnet" | "base";
@@ -298,7 +299,17 @@ class ClaimPixelsDialogStore extends Reactionable(
         this.pushNavigation(ClaimPixelsModalView.WaitingForConfirmation);
         this.startPollingForBurnConfirmation();
       } else {
-        log("route: Overview (no actionable state)");
+        // Check if all eligible pixels are already owned on V3 (fully migrated)
+        const allEligible = [...this.eligibility.mainnet, ...this.eligibility.base];
+        const ownedOnV3 = new Set(AppStore.web3.puppersOwned);
+        const alreadyClaimed = allEligible.length > 0 && allEligible.every(id => ownedOnV3.has(id));
+        if (alreadyClaimed) {
+          log("route: AlreadyClaimed (all eligible pixels already owned on V3)");
+          this.destroyNavigation();
+          this.pushNavigation(ClaimPixelsModalView.AlreadyClaimed);
+        } else {
+          log("route: Overview (no actionable state)");
+        }
       }
 
     } catch (error) {
