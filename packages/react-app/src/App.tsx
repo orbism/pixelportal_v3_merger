@@ -44,12 +44,8 @@ const useWeb3WagmiSync = () => {
   const transport = useMemo(() => client && client.transport, [client]);
 
   useEffect(() => {
-    if (chain && targetChain?.id === chain?.id) {
-      const network = {
-        chainId: chain.id,
-        name: chain.name,
-      };
-      const provider = new ethers.providers.Web3Provider(transport as any, network);
+    if (chain && account && transport) {
+      const provider = new ethers.providers.Web3Provider(transport as any, 'any');
       const signer = provider.getSigner(account.address);
       console.log("Connecting...");
       AppStore.web3.connect(signer, chain, provider);
