@@ -102,7 +102,6 @@ class Web3Store extends Reactionable(Web3providerStore) {
         console.log("Address:", address);
         if (address) {
           // console.log("Address changed:", address);
-          this.refreshDogBalance();
           this.refreshPupperBalance();
         }
       },
@@ -212,11 +211,11 @@ class Web3Store extends Reactionable(Web3providerStore) {
       // PX/DOG20 contract bindings so reads against Base still work.
       if (network.id === this.targetChainId) {
         this.connectToContracts(this.signer!);
+        this.refreshDogBalance();
+        this.refreshPupperBalance();
         await this.debugContractAddresses();
         await this.errorGuardContracts();
         this.cowStore.connect(this.signer!);
-        this.refreshDogBalance();
-        this.refreshPupperBalance();
       }
     } catch (e) {
       console.error(e);
