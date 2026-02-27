@@ -54,6 +54,7 @@ export interface Configuration {
   supportEmailRecipients: string;
   nomicsKey: string;
   alchemyKey: string;
+  infuraKey: string;
   chainAnalysisKey: string;
   blockCypherKey: string;
   phSecret: string;
@@ -119,6 +120,7 @@ export default () => ({
   supportEmailRecipients: process.env.SUPPORT_EMAIL_RECIPIENTS,
   nomicsKey: process.env.NOMICS_API_KEY,
   alchemyKey: process.env.ALCHEMY_KEY,
+  infuraKey: process.env.INFURA_KEY,
   chainAnalysisKey: process.env.CHAINANLYSIS_KEY,
   blockCypherKey: process.env.BLOCKCYPHER_KEY,
   phSecret: process.env.PH_SECRET,

@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Contract, JsonRpcProvider } from 'ethers';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Configuration } from '../config/configuration';
 import { LEGACY_PX_ABI } from '../contracts/legacyContracts';
 import * as contractData from '../contracts/abi.json';
@@ -42,17 +43,17 @@ export class BurnVerificationService implements OnModuleInit {
   }
 
   private initializeProviders() {
-    const alchemyKey = this.configService.get('alchemyKey');
+    const infuraKey = this.configService.get('infuraKey');
     const legacyContracts = this.configService.get('legacyContracts');
 
-    if (!alchemyKey) {
-      this.logger.warn('ALCHEMY_KEY not configured - burn verification disabled');
+    if (!infuraKey) {
+      this.logger.warn('INFURA_KEY not configured - burn verification disabled');
       return;
     }
 
     // Initialize Ethereum mainnet provider for V1 burn checks
     try {
-      const ethereumRpc = `https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`;
+      const ethereumRpc = `https://mainnet.infura.io/v3/${infuraKey}`;
       this.ethereumProvider = new JsonRpcProvider(ethereumRpc);
       this.v1Contract = new Contract(
         legacyContracts.v1.address,
@@ -66,7 +67,7 @@ export class BurnVerificationService implements OnModuleInit {
 
     // Initialize Ethereum Sepolia provider for V1 testnet burn checks
     try {
-      const sepoliaRpc = `https://eth-sepolia.g.alchemy.com/v2/${alchemyKey}`;
+      const sepoliaRpc = `https://sepolia.infura.io/v3/${infuraKey}`;
       this.sepoliaProvider = new JsonRpcProvider(sepoliaRpc);
       this.v1TestnetContract = new Contract(
         legacyContracts.v1Testnet.address,
@@ -80,7 +81,7 @@ export class BurnVerificationService implements OnModuleInit {
 
     // Initialize Base mainnet provider for V2 burn checks
     try {
-      const baseRpc = `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`;
+      const baseRpc = `https://base-mainnet.infura.io/v3/${infuraKey}`;
       this.baseProvider = new JsonRpcProvider(baseRpc);
       this.v2Contract = new Contract(
         legacyContracts.v2.address,
@@ -96,7 +97,7 @@ export class BurnVerificationService implements OnModuleInit {
     const v2TestnetAddress = legacyContracts.v2Testnet?.address;
     if (v2TestnetAddress) {
       try {
-        const baseSepoliaRpc = `https://base-sepolia.g.alchemy.com/v2/${alchemyKey}`;
+        const baseSepoliaRpc = `https://base-sepolia.infura.io/v3/${infuraKey}`;
         this.baseSepoliaProvider = new JsonRpcProvider(baseSepoliaRpc);
         this.v2TestnetContract = new Contract(
           v2TestnetAddress,
@@ -108,6 +109,14 @@ export class BurnVerificationService implements OnModuleInit {
         this.logger.error('Failed to initialize Base Sepolia provider:', error);
       }
     }
+
+    this.logger.log(
+      `Provider init summary: v1=${!!this.v1Contract}, v1Testnet=${!!this.v1TestnetContract}, v2=${!!this.v2Contract}, v2Testnet=${!!this.v2TestnetContract}`,
+    );
+
+    const burnKey = this.configService.get('burnVerificationKey');
+    this.logger.log(`Infura key: ${infuraKey ? 'configured' : 'MISSING'}`);
+    this.logger.log(`Burn verification wallet: ${burnKey ? 'configured' : 'MISSING - setBurnFlags will fail'}`);
   }
 
   /**
@@ -140,8 +149,9 @@ export class BurnVerificationService implements OnModuleInit {
     }
 
     try {
-      await contract.ownerOf(tokenId);
-      return false; // Token exists, not burned
+      const owner = await contract.ownerOf(tokenId);
+      // Some contracts return address(0) instead of reverting for burned tokens
+      return owner === '0x0000000000000000000000000000000000000000';
     } catch {
       return true; // ownerOf reverted, token is burned
     }
@@ -240,6 +250,17 @@ export class BurnVerificationService implements OnModuleInit {
     }
 
     return { results, txHash };
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async sweepCron() {
+    this.logger.log('Cron: running sweepUnconfirmedBurns');
+    try {
+      const result = await this.sweepUnconfirmedBurns();
+      this.logger.log(`Cron sweep complete: ${result.summary.total} new flags set`);
+    } catch (error) {
+      this.logger.error(`Cron sweep failed: ${error.message}`);
+    }
   }
 
   /**

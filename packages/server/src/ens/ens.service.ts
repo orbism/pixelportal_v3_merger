@@ -14,16 +14,15 @@ export class ENSService implements OnModuleInit {
   onModuleInit() {
     const appEnv = this.configService.get('appEnv');
     console.log('appEnv', appEnv);
-    const alchemyKey = this.configService.get('alchemyKey');
-    console.log('alchemyKey', alchemyKey);
+    const infuraKey = this.configService.get('infuraKey');
     // if (appEnv === AppEnv.production) {
     // look up ENS names on mainnet
     this.provider = new ethers.JsonRpcProvider(
-      `https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`,
+      `https://mainnet.infura.io/v3/${infuraKey}`,
     );
     // } else {
     //   this.provider = new ethers.JsonRpcProvider(
-    //     `https://eth-sepolia.g.alchemy.com/v2/${alchemyKey}`,
+    //     `https://sepolia.infura.io/v3/${infuraKey}`,
     //   );
     // }
   }

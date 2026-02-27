@@ -13,7 +13,7 @@ import { PixelTransferRepository } from './pixel-transfer.repository';
 @Injectable()
 export class PixelTransferService {
   private readonly logger = new Logger(PixelTransferService.name);
-  private readonly hasAlchemyKey: boolean;
+  private readonly hasInfuraKey: boolean;
 
   constructor(
     @Inject(forwardRef(() => OwnTheDogeContractService))
@@ -24,9 +24,9 @@ export class PixelTransferService {
     private readonly ud: UnstoppableDomainsService,
     private readonly configService: ConfigService,
   ) {
-    this.hasAlchemyKey = !!this.configService.get('alchemyKey');
-    if (!this.hasAlchemyKey) {
-      this.logger.warn('ALCHEMY_KEY not configured - ENS lookups will be skipped');
+    this.hasInfuraKey = !!this.configService.get('infuraKey');
+    if (!this.hasInfuraKey) {
+      this.logger.warn('INFURA_KEY not configured - ENS lookups will be skipped');
     }
   }
 
@@ -210,11 +210,11 @@ export class PixelTransferService {
       }
     }
 
-    // Get ENS/Basename names with timeout protection (skip if no Alchemy key)
+    // Get ENS/Basename names with timeout protection (skip if no Infura key)
     const addressCount = Object.keys(balances).length;
 
-    if (!this.hasAlchemyKey) {
-      this.logger.log(`getBalances: skipping ENS lookups (no ALCHEMY_KEY configured)`);
+    if (!this.hasInfuraKey) {
+      this.logger.log(`getBalances: skipping ENS lookups (no INFURA_KEY configured)`);
       for (const address in balances) {
         balances[address].ens = null;
       }
