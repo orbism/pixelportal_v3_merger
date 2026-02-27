@@ -49,19 +49,16 @@ const CreditsModal = ({ isOpen, onClose }: CreditsModalProps) => {
         <CreditsSection
           title="Direction"
           entries={[
-            { name: "Tridog", x: "Tridogdoteth" },
+            { name: "Smoke", x: "Smoke_theArtist" },
+            { name: "Path", x: "Cryptopathic" },
           ]}
         />
         <CreditsSection
-          title="Design"
+          title="Development & Design"
           entries={[
-            { name: "Your Name Here" },
-          ]}
-        />
-        <CreditsSection
-          title="Development"
-          entries={[
-            { name: "Your Name Here" },
+            { name: "Caleb", x: "caleb__guy" },
+            { name: "Orb", x: "ArtofOrb" },
+            { name: "Moon", x: "TheMoonOfficia2" },
           ]}
         />
       </VStack>
