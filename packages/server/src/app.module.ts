@@ -65,7 +65,7 @@ import { SupportService } from './support/support.service';
               },
             }),
           });
-          store.client.on('error', (err: Error) => {
+          store.getClient.on('error', (err: Error) => {
             console.error('[Redis] Client error (non-fatal):', err.message);
           });
           console.log('[CacheModule] Redis store initialized successfully');
