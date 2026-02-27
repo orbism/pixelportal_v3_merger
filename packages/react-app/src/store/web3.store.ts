@@ -283,41 +283,17 @@ class Web3Store extends Reactionable(Web3providerStore) {
   }
 
   async getPixelOwnershipMap() {
-    console.log('📡 Fetching pixel ownership map from server...');
-    console.log('📡 Current address:', this.address);
-    console.log('📡 API endpoint:', Http.defaults?.baseURL || 'unknown');
-    
     try {
-      const response = await Http.get("/v1/config");
-      const data = response.data;
-      
-      console.log('✅ Pixel ownership data received');
-      console.log('✅ Response type:', typeof data);
-      console.log('✅ Response keys:', Object.keys(data));
-      console.log('✅ Number of addresses with pixels:', Object.keys(data).length);
-      console.log('✅ All addresses with pixels:', Object.keys(data));
-      console.log('🔍 Your address:', this.address);
-      console.log('🔍 Your address pixels:', data[this.address]);
-      console.log('🔍 Your address pixels (lowercase):', data[this.address?.toLowerCase()]);
-      console.log('📊 Full data:', JSON.stringify(data, null, 2));
-      
+      const { data } = await Http.get("/v1/config");
       this.addressToPuppers = data;
       return data;
     } catch (error) {
-      console.error('❌ Failed to fetch pixel ownership:', error);
-      console.error('❌ Error details:', error.message);
-      if (error.response) {
-        console.error('❌ Response status:', error.response.status);
-        console.error('❌ Response data:', error.response.data);
-      }
       throw error;
     }
   }
 
   refreshPixelOwnershipMap() {
-    console.log('🔄 Refreshing pixel ownership map...');
     return Http.get("/v1/config/refresh").then(({ data }) => {
-      console.log('✅ Pixel ownership refreshed:', data);
       this.addressToPuppers = data;
       return data;
     });
@@ -333,16 +309,17 @@ class Web3Store extends Reactionable(Web3providerStore) {
   @computed
   get puppersOwned() {
     let myPuppers: number[] = [];
-    if (this.address && this.address in this.addressToPuppers!) {
-      myPuppers = this.addressToPuppers![this.address].tokenIds;
+    if (this.address && this.addressToPuppers) {
+      const lowerAddress = this.address.toLowerCase();
+      // Normalize key lookup to handle mixed-case address inconsistency between
+      // wagmi (checksummed) and server DB (as-is from ethers event args)
+      const matchKey = Object.keys(this.addressToPuppers).find(
+        k => k.toLowerCase() === lowerAddress
+      );
+      if (matchKey) {
+        myPuppers = this.addressToPuppers[matchKey].tokenIds;
+      }
     }
-    // Debug logging
-    console.log('🔍 puppersOwned check:', {
-      address: this.address,
-      addressToPuppers: this.addressToPuppers,
-      myPuppers: myPuppers,
-      length: myPuppers.length
-    });
     return myPuppers;
   }
 

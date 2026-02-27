@@ -200,13 +200,14 @@ export class PixelTransferService {
 
     const balances = {};
 
-    // Compile balances excluding burnt tokens
+    // Compile balances excluding burnt tokens (lowercase keys for consistent lookups)
     for (const [tokenId, { address }] of Object.entries(tokenStates)) {
-      if (address !== '0x0000000000000000000000000000000000000000') {
-        if (!balances[address]) {
-          balances[address] = { tokenIds: [] };
+      const normalizedAddress = address.toLowerCase();
+      if (normalizedAddress !== '0x0000000000000000000000000000000000000000') {
+        if (!balances[normalizedAddress]) {
+          balances[normalizedAddress] = { tokenIds: [] };
         }
-        balances[address].tokenIds.push(Number(tokenId));
+        balances[normalizedAddress].tokenIds.push(Number(tokenId));
       }
     }
 
