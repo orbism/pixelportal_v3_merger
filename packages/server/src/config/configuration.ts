@@ -1,4 +1,5 @@
 import { SupportedNetwork } from '../alchemy/alchemy.service';
+import { V1_CONTRACT_ADDRESSES, V2_CONTRACT_ADDRESSES, CHAIN_IDS } from '../contracts/legacyContracts';
 
 export enum AppEnv {
   development = 'development',
@@ -63,7 +64,7 @@ export interface Configuration {
     v1: { address: string; chainId: number };
     v1Testnet: { address: string; chainId: number };
     v2: { address: string; chainId: number };
-    v2Testnet: { chainId: number };
+    v2Testnet: { address: string; chainId: number };
   };
   rpcRateLimitDelayMs: number;
   rpcBlockRangeLimit: number;
@@ -125,22 +126,10 @@ export default () => ({
   freeMoneyEnabled: !!(process.env.DRIP_KEY && process.env.DRIP_KEY.trim()),
   burnVerificationKey: process.env.BURN_VERIFICATION_KEY || '',
   legacyContracts: {
-    v1: {
-      address: '0xBAac2B4491727D78D2b78815144570b9f2Fe8899',
-      chainId: 1,
-    },
-    v1Testnet: {
-      address: '0x8ad55a76dF77EE8Ec30F598D1f30C7e5c73F11FF',
-      chainId: 11155111,
-    },
-    v2: {
-      address: '0xAfb89a09D82FBDE58f18Ac6437B3fC81724e4dF6',
-      chainId: 8453,
-    },
-    // Base Sepolia testnet - loaded from abi.json in burn-verification service
-    v2Testnet: {
-      chainId: 84532,
-    },
+    v1: { address: V1_CONTRACT_ADDRESSES[CHAIN_IDS.ETHEREUM_MAINNET], chainId: CHAIN_IDS.ETHEREUM_MAINNET },
+    v1Testnet: { address: V1_CONTRACT_ADDRESSES[CHAIN_IDS.ETHEREUM_SEPOLIA], chainId: CHAIN_IDS.ETHEREUM_SEPOLIA },
+    v2: { address: V2_CONTRACT_ADDRESSES[CHAIN_IDS.BASE_MAINNET], chainId: CHAIN_IDS.BASE_MAINNET },
+    v2Testnet: { address: V2_CONTRACT_ADDRESSES[CHAIN_IDS.BASE_SEPOLIA], chainId: CHAIN_IDS.BASE_SEPOLIA },
   },
   // Alchemy free tier: 500 CUPs, eth_getLogs = 75 CUs = ~6 req/sec max
   // Default 500ms = 2 req/sec to stay safely under limit with headroom for other requests

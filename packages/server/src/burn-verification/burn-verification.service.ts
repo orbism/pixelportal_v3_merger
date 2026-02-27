@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Contract, JsonRpcProvider } from 'ethers';
 import { Configuration } from '../config/configuration';
-import { LEGACY_PX_ABI } from '../contracts/legacyAbi';
+import { LEGACY_PX_ABI } from '../contracts/legacyContracts';
 import * as contractData from '../contracts/abi.json';
 import { MigrationService, SnapshotEntry } from '../migration/migration.service';
 import { OwnTheDogeContractService } from '../ownthedoge-contracts/ownthedoge-contracts.service';
@@ -93,18 +93,17 @@ export class BurnVerificationService implements OnModuleInit {
     }
 
     // Initialize Base Sepolia provider for V2 testnet burn checks
-    // Read contract address from abi.json deployment data
-    const baseSepoliaContract = contractData?.['84532']?.['base-sepolia']?.contracts?.PX;
-    if (baseSepoliaContract?.address) {
+    const v2TestnetAddress = legacyContracts.v2Testnet?.address;
+    if (v2TestnetAddress) {
       try {
         const baseSepoliaRpc = `https://base-sepolia.g.alchemy.com/v2/${alchemyKey}`;
         this.baseSepoliaProvider = new JsonRpcProvider(baseSepoliaRpc);
         this.v2TestnetContract = new Contract(
-          baseSepoliaContract.address,
+          v2TestnetAddress,
           LEGACY_PX_ABI,
           this.baseSepoliaProvider,
         );
-        this.logger.log(`Base Sepolia provider initialized for testnet burn verification (${baseSepoliaContract.address})`);
+        this.logger.log(`Base Sepolia provider initialized for testnet burn verification (${v2TestnetAddress})`);
       } catch (error) {
         this.logger.error('Failed to initialize Base Sepolia provider:', error);
       }
