@@ -308,15 +308,22 @@ class ClaimPixelsDialogStore extends Reactionable(
         this.pushNavigation(ClaimPixelsModalView.WaitingForConfirmation);
         this.startPollingForBurnConfirmation();
       } else {
-        // Primary check: local "claimed" marker written after successful claim
+        // Primary check: localStorage flag written on successful claim
         const localClaimed = stored?.claimed === true;
-        // Fallback: server-indexed V3 ownership (works cross-device if transfer events indexed)
+        // Fallback A: server-indexed V3 ownership
         const allEligible = [...this.eligibility.mainnet, ...this.eligibility.base];
         const ownedOnV3 = new Set(AppStore.web3.puppersOwned);
         const serverClaimed = allEligible.length > 0 && allEligible.every(id => ownedOnV3.has(id));
+        // Fallback B: direct V3 contract ownerOf check (works even with empty localStorage + unindexed server)
+        let contractClaimed = false;
+        if (!localClaimed && !serverClaimed && allEligible.length > 0 && AppStore.web3.address) {
+          const owned = await AppStore.web3.getOwnedEligibleV3Tokens(allEligible, AppStore.web3.address);
+          contractClaimed = owned.length > 0;
+        }
 
-        if (localClaimed || serverClaimed) {
-          log("route: AlreadyClaimed", localClaimed ? "(local flag)" : "(server ownership)");
+        if (localClaimed || serverClaimed || contractClaimed) {
+          log("route: AlreadyClaimed",
+            localClaimed ? "(local flag)" : serverClaimed ? "(server ownership)" : "(contract ownerOf)");
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.AlreadyClaimed);
         } else {

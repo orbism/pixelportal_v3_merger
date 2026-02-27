@@ -463,6 +463,18 @@ class Web3Store extends Reactionable(Web3providerStore) {
     return this.pxContract.canClaimReservedToken(tokenId, user);
   }
 
+  async getOwnedEligibleV3Tokens(tokenIds: number[], address: string): Promise<number[]> {
+    if (!this.pxContract) return [];
+    const results = await Promise.allSettled(
+      tokenIds.map(id =>
+        this.pxContract!.ownerOf(id).then((owner: string) => ({ id, owner }))
+      )
+    );
+    return results
+      .filter(r => r.status === "fulfilled" && (r as PromiseFulfilledResult<{ id: number; owner: string }>).value.owner.toLowerCase() === address.toLowerCase())
+      .map(r => (r as PromiseFulfilledResult<{ id: number; owner: string }>).value.id);
+  }
+
   pupperToIndexLocal(pupper: number) {
     return pupper - this.PIXEL_TO_ID_OFFSET;
   }
