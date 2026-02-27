@@ -582,7 +582,8 @@ class ClaimPixelsDialogStore extends Reactionable(
     // DOG approval check
     try {
       const allowance = await AppStore.web3.getPxDogSpendAllowance();
-      const totalNeeded = this.totalDogNeeded;
+      const lockAmountPerPixel = await AppStore.web3.getPxLockAmountPerPixel();
+      const totalNeeded = lockAmountPerPixel.mul(this.claimablePixels.length);
       log(`claim: DOG allowance=${ethers.utils.formatEther(allowance)}, needed=${ethers.utils.formatEther(totalNeeded)}, sufficient=${allowance.gte(totalNeeded)}`);
 
       if (allowance.lt(totalNeeded)) {

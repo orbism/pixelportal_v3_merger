@@ -408,6 +408,10 @@ class Web3Store extends Reactionable(Web3providerStore) {
     return this.dogContract!.allowance(this.address!, this.pxContractAddress);
   }
 
+  async getPxLockAmountPerPixel(): Promise<BigNumber> {
+    return this.pxContract!.tokenLockAmounts(this.dogContractAddress);
+  }
+
   async getDogToAccount() {
     const freePixelsInDOG = 50;
     //@ts-ignore
