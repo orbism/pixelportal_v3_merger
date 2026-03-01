@@ -467,8 +467,8 @@ export class OwnTheDogeContractService implements OnModuleInit {
 
   private async fetchDimensionsFromContract(): Promise<{ width: string; height: string }> {
     try {
-      // Wait for contract initialization (max 10s)
-      await this.waitForContracts(10000);
+      // Wait for contract initialization (max 2s — fail fast to avoid Heroku 30s timeout)
+      await this.waitForContracts(2000);
 
       if (!this.pxContract) {
         throw new Error('PX contract not initialized');
@@ -502,15 +502,27 @@ export class OwnTheDogeContractService implements OnModuleInit {
     return this.pxContract.ownerOf(tokenId);
   }
 
+  private balanceCache = new Map<string, { value: any; timestamp: number }>();
+  private BALANCE_CACHE_TTL = 30_000;
+
   async getPixelBalanceByAddress(address: string) {
-    // Wait for contract initialization (max 10s)
-    await this.waitForContracts(10000);
-    
+    // Check cache first
+    const now = Date.now();
+    const cached = this.balanceCache.get(address);
+    if (cached && (now - cached.timestamp) < this.BALANCE_CACHE_TTL) {
+      return cached.value;
+    }
+
+    // Wait for contract initialization (max 2s — fail fast to avoid Heroku 30s timeout)
+    await this.waitForContracts(2000);
+
     if (!this.pxContract) {
       throw new Error('PX contract not initialized');
     }
-    
-    return this.pxContract.balanceOf(address);
+
+    const balance = await this.pxContract.balanceOf(address);
+    this.balanceCache.set(address, { value: balance, timestamp: now });
+    return balance;
   }
 
   pixelToIndexLocal(pixel: number) {

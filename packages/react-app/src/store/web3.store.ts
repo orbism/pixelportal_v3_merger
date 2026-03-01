@@ -325,14 +325,11 @@ class Web3Store extends Reactionable(Web3providerStore) {
   }
 
   async refreshPupperBalance() {
-    try {
-      const balance = await this.getPupperBalance();
+    const balance = await this.getPupperBalance();
+    if (balance >= 0) {
       this.setPupperBalance(balance);
-    } catch (e) {
-      const { message } = e as EthersContractError;
-      this.setPupperBalance(0);
-      showErrorToast(message);
     }
+    // On error (-1): leave previous balance in place, don't overwrite with bad data
   }
 
   async getDogBalance() {
@@ -363,7 +360,7 @@ class Web3Store extends Reactionable(Web3providerStore) {
       return res.data.balance;
     } catch (error) {
       console.error('❌ Failed to fetch pupper balance:', error);
-      return 0;
+      return -1;
     }
   }
 

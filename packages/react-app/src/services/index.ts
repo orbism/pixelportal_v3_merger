@@ -26,8 +26,6 @@ function throttledGet(url: string, force = false): Promise<any> {
   const promise = Http.get(url);
   requestCache.set(url, { promise, timestamp: now });
 
-  promise.catch(() => requestCache.delete(url));
-
   return promise;
 }
 
