@@ -2,6 +2,7 @@ import { Box, Flex, Menu, MenuButton, MenuItem, MenuList, useColorMode, useMulti
 import { ethers } from "ethers";
 import { observer } from "mobx-react-lite";
 import { useState, useEffect } from "react";
+import { IoReload } from "react-icons/io5";
 import { generatePath, useHistory, useLocation } from "react-router-dom";
 import { useAccount, useDisconnect, useBlockNumber } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
@@ -28,7 +29,6 @@ const UserDropdown = observer(() => {
   useEffect(() => {
     if (address) {
       AppStore.web3.setAddress(address);
-      AppStore.web3.refreshPupperBalance();
     }
   }, [address]);
 
@@ -37,12 +37,6 @@ const UserDropdown = observer(() => {
       AppStore.web3.refreshPupperBalance();
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    if (AppStore.web3.address && AppStore.web3.signer) {
-      AppStore.web3.getDogBalance();
-    }
-  }, [AppStore.web3.address, AppStore.web3.signer]);
 
   return (
     <Box>
@@ -102,7 +96,16 @@ const UserDropdown = observer(() => {
   );
 });
 
+const spinKeyframes = {
+  "@keyframes spin": {
+    "100%": { transform: "rotate(360deg)" },
+  },
+};
+
 const Balances = observer(function Balances() {
+  const [isRefreshingDog, setRefreshingDog] = useState(false);
+  const [isRefreshingPixels, setRefreshingPixels] = useState(false);
+
   return (
     <Box px={3}>
       {AppStore.web3?.address && (
@@ -111,11 +114,17 @@ const Balances = observer(function Balances() {
             <Flex alignItems={"center"} justifyContent={"space-between"}>
               <Typography variant={TVariant.PresStart16}>DOG</Typography>
               <Dev>
-                <Flex>
-                  <Box ml={1} _hover={{ cursor: "pointer" }} onClick={async () => AppStore.web3.refreshDogBalance()}>
-                    🔄
-                  </Box>
-                </Flex>
+                <Box
+                  as={IoReload}
+                  boxSize="14px"
+                  cursor="pointer"
+                  onClick={async () => {
+                    setRefreshingDog(true);
+                    await AppStore.web3.refreshDogBalance();
+                    setRefreshingDog(false);
+                  }}
+                  sx={isRefreshingDog ? { animation: "spin 0.8s linear infinite", ...spinKeyframes } : {}}
+                />
               </Dev>
             </Flex>
             <Typography variant={TVariant.ComicSans18} mt={1} block>
@@ -129,14 +138,24 @@ const Balances = observer(function Balances() {
               <Flex alignItems={"center"} justifyContent={"space-between"}>
                 <Typography variant={TVariant.PresStart16}>Pixels</Typography>
                 <Dev>
-                  <Box onClick={async () => AppStore.web3.refreshPupperBalance()}>🔄</Box>
+                  <Box
+                    as={IoReload}
+                    boxSize="14px"
+                    cursor="pointer"
+                    onClick={async () => {
+                      setRefreshingPixels(true);
+                      await AppStore.web3.refreshPupperBalance();
+                      setRefreshingPixels(false);
+                    }}
+                    sx={isRefreshingPixels ? { animation: "spin 0.8s linear infinite", ...spinKeyframes } : {}}
+                  />
                 </Dev>
               </Flex>
             </Box>
             <Typography variant={TVariant.ComicSans18} mt={1} block>
               {AppStore.web3.pupperBalance !== null
                 ? AppStore.web3.pupperBalance === 0
-                  ? "None 😕"
+                  ? "None"
                   : formatWithThousandsSeparators(AppStore.web3.pupperBalance)
                 : "Loading..."}
             </Typography>

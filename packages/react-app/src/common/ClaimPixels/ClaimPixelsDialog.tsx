@@ -1,7 +1,7 @@
-import { Box, Divider, Flex, SimpleGrid, VStack, HStack, Alert, AlertIcon } from "@chakra-ui/react";
+import { Box, Divider, Flex, SimpleGrid, VStack, HStack, Alert, AlertIcon, useColorMode } from "@chakra-ui/react";
 import { ethers } from "ethers";
 import { observer } from "mobx-react-lite";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Button from "../../DSL/Button/Button";
 import Form from "../../DSL/Form/Form";
 import Submit from "../../DSL/Form/Submit";
@@ -12,6 +12,7 @@ import Link from "../../DSL/Link/Link";
 import SharePixelsDialog from "../SharePixelsDialog/SharePixelsDialog";
 import ClaimPixelsDialogStore, { ClaimPixelsModalView, BurnNetwork } from "./ClaimPixelsDialog.store";
 import PixelPane from "../../DSL/PixelPane/PixelPane";
+import { lightOrDarkMode } from "../../DSL/Theme";
 
 interface ClaimPixelsDialogProps {
   store: ClaimPixelsDialogStore;
@@ -46,6 +47,9 @@ const ClaimPixelsDialog = observer(({ store, onSuccess, onCompleteClose }: Claim
       {store.currentView === ClaimPixelsModalView.Complete && (
         <Complete store={store} txHash={store.txHash} onClose={onCompleteClose} />
       )}
+      {store.currentView === ClaimPixelsModalView.AlreadyClaimed && (
+        <AlreadyClaimed store={store} onClose={onCompleteClose} />
+      )}
     </>
   );
 });
@@ -54,6 +58,8 @@ const ClaimPixelsDialog = observer(({ store, onSuccess, onCompleteClose }: Claim
 // Overview View - Shows eligible pixels by network
 // ============================================
 const Overview = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
+  const { colorMode } = useColorMode();
+
   if (store.isLoading) {
     return <Loading title={"Checking eligibility..."} />;
   }
@@ -87,7 +93,13 @@ const Overview = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
       </Box>
 
       {/* Instructions */}
-      <Box bg="yellow.50" p={4} borderRadius="md" border="1px solid" borderColor="yellow.200">
+      <Box
+        bg={lightOrDarkMode(colorMode, "yellow.50", "purple.800")}
+        p={4}
+        borderRadius="md"
+        border="1px solid"
+        borderColor={lightOrDarkMode(colorMode, "yellow.300", "purple.500")}
+      >
         <Typography variant={TVariant.ComicSans14} block fontWeight="bold" mb={2}>
           How It Works:
         </Typography>
@@ -109,7 +121,13 @@ const Overview = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
 
       {/* Claimable Pixels Section - Show first if user has already burned */}
       {hasClaimablePixels && (
-        <Box bg="green.50" p={4} borderRadius="md" border="2px solid" borderColor="green.400">
+        <Box
+          bg={lightOrDarkMode(colorMode, "green.50", "green.900")}
+          p={4}
+          borderRadius="md"
+          border="2px solid"
+          borderColor={lightOrDarkMode(colorMode, "green.400", "green.500")}
+        >
           <HStack justify="space-between" align="center" mb={3}>
             <Box>
               <Typography variant={TVariant.PresStart14} block>
@@ -180,6 +198,7 @@ interface NetworkSectionProps {
 }
 
 const NetworkSection = observer(({ store, network, title, pixelsToBurn, allPixels, burnedPixels }: NetworkSectionProps) => {
+  const { colorMode } = useColorMode();
   const allBurned = pixelsToBurn.length === 0 && burnedPixels.length > 0;
 
   return (
@@ -187,8 +206,12 @@ const NetworkSection = observer(({ store, network, title, pixelsToBurn, allPixel
       p={4}
       borderRadius="md"
       border="1px solid"
-      borderColor={allBurned ? "green.300" : "gray.300"}
-      bg={allBurned ? "green.50" : "white"}
+      borderColor={allBurned
+        ? lightOrDarkMode(colorMode, "green.300", "green.600")
+        : lightOrDarkMode(colorMode, "gray.300", "purple.500")}
+      bg={allBurned
+        ? lightOrDarkMode(colorMode, "green.50", "green.900")
+        : lightOrDarkMode(colorMode, "white", "purple.700")}
     >
       <HStack justify="space-between" align="center" mb={3}>
         <Box>
@@ -197,7 +220,7 @@ const NetworkSection = observer(({ store, network, title, pixelsToBurn, allPixel
           </Typography>
           <Typography variant={TVariant.ComicSans12} block mt={1}>
             {allBurned ? (
-              <span style={{ color: "green" }}>All {burnedPixels.length} pixels burned</span>
+              <span style={{ color: lightOrDarkMode(colorMode, "green", "#68D391") }}>All {burnedPixels.length} pixels burned</span>
             ) : (
               `${pixelsToBurn.length} pixel(s) to burn`
             )}
@@ -236,6 +259,8 @@ const NetworkSection = observer(({ store, network, title, pixelsToBurn, allPixel
 // Confirm Burn Modal
 // ============================================
 const ConfirmBurn = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
+  const { colorMode } = useColorMode();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const network = store.pendingBurnNetwork;
   const pixelCount = network === "mainnet" ? store.mainnetPixelsToBurn.length : store.basePixelsToBurn.length;
   const networkName = network === "mainnet" ? "Ethereum Mainnet" : "Base";
@@ -258,7 +283,7 @@ const ConfirmBurn = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
         </Typography>
       </Alert>
 
-      <Box bg="gray.50" p={4} borderRadius="md">
+      <Box bg={lightOrDarkMode(colorMode, "gray.50", "purple.800")} p={4} borderRadius="md">
         <Typography variant={TVariant.ComicSans14} block mb={2}>
           <strong>Network:</strong> {networkName}
         </Typography>
@@ -277,14 +302,24 @@ const ConfirmBurn = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
         Your wallet will prompt you to switch networks and confirm the transaction.
       </Typography>
 
-      <HStack justify="center" spacing={4}>
-        <Button onClick={() => store.cancelBurn()} variant="outline">
-          Cancel
-        </Button>
-        <Button onClick={() => store.confirmBurn()} colorScheme="orange">
-          Burn {pixelCount} Pixels
-        </Button>
-      </HStack>
+      {isSubmitting ? (
+        <Loading title={`Burning pixels on ${networkName}...`} showSigningHint={true} />
+      ) : (
+        <HStack justify="center" spacing={4}>
+          <Button onClick={() => store.cancelBurn()} variant="outline">
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              setIsSubmitting(true);
+              store.confirmBurn();
+            }}
+            colorScheme="orange"
+          >
+            Burn {pixelCount} Pixels
+          </Button>
+        </HStack>
+      )}
     </VStack>
   );
 });
@@ -386,6 +421,8 @@ const ApprovingDOG = observer(({ store }: { store: ClaimPixelsDialogStore }) => 
 // Ready to Claim - All-or-nothing pixel claim
 // ============================================
 const ReadyToClaim = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
+  const { colorMode } = useColorMode();
+
   if (store.claimablePixels.length === 0) {
     return (
       <Box textAlign="center" py={8}>
@@ -419,7 +456,7 @@ const ReadyToClaim = observer(({ store }: { store: ClaimPixelsDialogStore }) => 
       </Box>
 
       {/* DOG balance status */}
-      <Box bg="blue.50" p={3} borderRadius="md">
+      <Box bg={lightOrDarkMode(colorMode, "blue.50", "purple.800")} p={3} borderRadius="md">
         <Typography variant={TVariant.ComicSans12} block>
           <strong>Your $DOG balance:</strong> {dogBalanceFormatted} $DOG
         </Typography>
@@ -468,10 +505,10 @@ const ReadyToClaim = observer(({ store }: { store: ClaimPixelsDialogStore }) => 
               key={pixel.tokenId}
               position="relative"
               border="1px solid"
-              borderColor="green.400"
+              borderColor={lightOrDarkMode(colorMode, "green.400", "green.600")}
               p={2}
               borderRadius="md"
-              bg="green.50"
+              bg={lightOrDarkMode(colorMode, "green.50", "green.900")}
             >
               <PixelPane size="xs" pupper={pixel.tokenId} />
               <Typography variant={TVariant.PresStart10} textAlign="center" mt={1}>
@@ -553,5 +590,61 @@ const Complete = observer(
     );
   },
 );
+
+// ============================================
+// Already Claimed
+// ============================================
+const AlreadyClaimed = observer(({ store, onClose }: { store: ClaimPixelsDialogStore; onClose: () => void }) => {
+  const { colorMode } = useColorMode();
+  const allEligible = [...store.eligibility.mainnet, ...store.eligibility.base];
+
+  return (
+    <VStack spacing={6} align="stretch">
+      <Box textAlign="center">
+        <Typography variant={TVariant.PresStart20} block>
+          Already Claimed!
+        </Typography>
+        <Typography variant={TVariant.ComicSans14} block mt={2}>
+          You've already claimed your V3 pixels.
+        </Typography>
+      </Box>
+
+      <Alert status="success" borderRadius="md">
+        <AlertIcon />
+        <Typography variant={TVariant.ComicSans14}>
+          All {allEligible.length} pixel(s) from your V1/V2 migration have been successfully claimed on V3.
+        </Typography>
+      </Alert>
+
+      {allEligible.length > 0 && (
+        <Box
+          bg={lightOrDarkMode(colorMode, "green.50", "green.900")}
+          p={4}
+          borderRadius="md"
+          border="1px solid"
+          borderColor={lightOrDarkMode(colorMode, "green.300", "green.600")}
+        >
+          <Typography variant={TVariant.ComicSans12} block mb={3} fontWeight="bold">
+            Your claimed pixels:
+          </Typography>
+          <Box maxH="200px" overflowY="auto">
+            <SimpleGrid columns={{ base: 4, md: 6 }} spacing={2}>
+              {allEligible.map(tokenId => (
+                <Box key={tokenId} textAlign="center">
+                  <PixelPane size="xs" pupper={tokenId} />
+                  <Typography variant={TVariant.PresStart8}>#{tokenId}</Typography>
+                </Box>
+              ))}
+            </SimpleGrid>
+          </Box>
+        </Box>
+      )}
+
+      <Flex justifyContent="center" mt={2}>
+        <Button onClick={onClose}>Close</Button>
+      </Flex>
+    </VStack>
+  );
+});
 
 export default ClaimPixelsDialog;

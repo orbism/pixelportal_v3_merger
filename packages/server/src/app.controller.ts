@@ -392,13 +392,13 @@ export class AppController {
    */
   @Post('migration/verify-burns')
   async verifyBurns(
-    @Body() { tokenIds, network }: { tokenIds: number[]; network: 'mainnet' | 'base' | 'base-sepolia' },
+    @Body() { tokenIds, network }: { tokenIds: number[]; network: 'mainnet' | 'sepolia' | 'base' | 'base-sepolia' },
   ) {
     if (!tokenIds || !Array.isArray(tokenIds) || tokenIds.length === 0) {
       throw new BadRequestException('tokenIds array is required');
     }
-    if (!['mainnet', 'base', 'base-sepolia'].includes(network)) {
-      throw new BadRequestException('network must be "mainnet", "base", or "base-sepolia"');
+    if (!['mainnet', 'sepolia', 'base', 'base-sepolia'].includes(network)) {
+      throw new BadRequestException('network must be "mainnet", "sepolia", "base", or "base-sepolia"');
     }
     if (tokenIds.length > 50) {
       throw new BadRequestException('Maximum 50 tokens per request');

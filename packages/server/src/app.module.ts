@@ -57,7 +57,16 @@ import { SupportService } from './support/support.service';
           const store = await redisStore({
             url: redisUrl,
             ttl: 10000,
-            ...(isLocalhost ? {} : { socket: { tls: true, rejectUnauthorized: false } }),
+            ...(isLocalhost ? {} : {
+              socket: {
+                tls: true,
+                rejectUnauthorized: false,
+                reconnectStrategy: (retries: number) => Math.min(retries * 200, 5000),
+              },
+            }),
+          });
+          store.getClient.on('error', (err: Error) => {
+            console.error('[Redis] Client error (non-fatal):', err.message);
           });
           console.log('[CacheModule] Redis store initialized successfully');
           return { store, ttl: 10000, max: 10000 };

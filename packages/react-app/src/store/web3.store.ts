@@ -19,7 +19,7 @@ import { ObjectKeys } from "../helpers/objects";
 import { abbreviate } from "../helpers/strings";
 import KobosuJson from "../images/kobosu.json";
 import { PixelOwnerInfo } from "../pages/Leaderbork/Leaderbork.store";
-import { Http } from "../services";
+import { Http, throttledGet } from "../services";
 import LocalStorage from "../services/local-storage";
 import { Reactionable } from "../services/mixins/reactionable";
 import CowStore from "./cow.store";
@@ -96,17 +96,6 @@ class Web3Store extends Reactionable(Web3providerStore) {
     console.log("Specific Network Contract Data:", deployedContracts[this.targetChainId.toString()]?.[this.targetNetworkName]);
 
     makeObservable(this);
-    reaction(
-      () => this.address,
-      address => {
-        console.log("Address:", address);
-        if (address) {
-          // console.log("Address changed:", address);
-          this.refreshDogBalance();
-          this.refreshPupperBalance();
-        }
-      },
-    );
 
     // reaction(
     //   () => this.signer,
@@ -206,12 +195,19 @@ class Web3Store extends Reactionable(Web3providerStore) {
   async connect(signer: ethers.Signer, network: Chain, provider: ethers.providers.BaseProvider) {
     try {
       await super.connect(signer, network, provider);
-      this.connectToContracts(this.signer!);
-      await this.debugContractAddresses();
-      await this.errorGuardContracts();
-      this.cowStore.connect(this.signer!);
-      this.refreshDogBalance();
-      this.refreshPupperBalance();
+
+      // Only rebind contracts when on the target chain.
+      // When temporarily on L1 (e.g. Sepolia for V1 burn), keep existing
+      // PX/DOG20 contract bindings so reads against Base still work.
+      if (network.id === this.targetChainId) {
+        this.connectToContracts(this.signer!);
+        this.refreshDogBalance();
+        this.refreshPupperBalance();
+        await this.debugContractAddresses();
+        await this.errorGuardContracts();
+        this.validateMyPixelsOnChain(); // fire-and-forget: prune stale/burned pixels
+        this.cowStore.connect(this.signer!);
+      }
     } catch (e) {
       console.error(e);
       Sentry.captureException(e);
@@ -243,7 +239,7 @@ class Web3Store extends Reactionable(Web3providerStore) {
   }
 
   async debugContractAddresses() {
-    const res = await Http.get("/v1/contract/addresses");
+    const res = await throttledGet("/v1/contract/addresses");
     const { dog: dogAddress, pixel: pixelAddress } = res.data;
 
     if (dogAddress !== this.dogContractAddress) {
@@ -278,48 +274,48 @@ class Web3Store extends Reactionable(Web3providerStore) {
   }
 
   async getPixelOwnershipMap() {
-    console.log('📡 Fetching pixel ownership map from server...');
-    console.log('📡 Current address:', this.address);
-    console.log('📡 API endpoint:', Http.defaults?.baseURL || 'unknown');
-    
     try {
-      const response = await Http.get("/v1/config");
-      const data = response.data;
-      
-      console.log('✅ Pixel ownership data received');
-      console.log('✅ Response type:', typeof data);
-      console.log('✅ Response keys:', Object.keys(data));
-      console.log('✅ Number of addresses with pixels:', Object.keys(data).length);
-      console.log('✅ All addresses with pixels:', Object.keys(data));
-      console.log('🔍 Your address:', this.address);
-      console.log('🔍 Your address pixels:', data[this.address]);
-      console.log('🔍 Your address pixels (lowercase):', data[this.address?.toLowerCase()]);
-      console.log('📊 Full data:', JSON.stringify(data, null, 2));
-      
+      const { data } = await throttledGet("/v1/config");
       this.addressToPuppers = data;
       return data;
     } catch (error) {
-      console.error('❌ Failed to fetch pixel ownership:', error);
-      console.error('❌ Error details:', error.message);
-      if (error.response) {
-        console.error('❌ Response status:', error.response.status);
-        console.error('❌ Response data:', error.response.data);
-      }
       throw error;
     }
   }
 
   refreshPixelOwnershipMap() {
-    console.log('🔄 Refreshing pixel ownership map...');
     return Http.get("/v1/config/refresh").then(({ data }) => {
-      console.log('✅ Pixel ownership refreshed:', data);
       this.addressToPuppers = data;
+      this.validateMyPixelsOnChain(); // fire-and-forget
       return data;
     });
   }
 
+  async validateMyPixelsOnChain() {
+    if (!this.address || !this.addressToPuppers || !this.pxContract) return;
+    const myPixels = this.puppersOwned;
+    if (myPixels.length === 0) return;
+
+    const verified = await this.getOwnedEligibleV3Tokens(myPixels, this.address);
+    const stale = myPixels.filter(p => !verified.includes(p));
+
+    if (stale.length > 0) {
+      console.warn(`Stale pixels removed (burned on-chain): ${stale.join(', ')}`);
+      const key = Object.keys(this.addressToPuppers!).find(
+        k => k.toLowerCase() === this.address!.toLowerCase()
+      );
+      if (key) {
+        runInAction(() => {
+          this.addressToPuppers![key].tokenIds = verified;
+        });
+      }
+      // Trigger server refresh in background so future loads are correct
+      Http.get("/v1/config/refresh").catch(() => {});
+    }
+  }
+
   getShibaDimensions() {
-    return Http.get("/v1/px/dimensions").then(({ data }) => {
+    return throttledGet("/v1/px/dimensions").then(({ data }) => {
       this.WIDTH = data.width;
       this.HEIGHT = data.height;
     });
@@ -328,16 +324,17 @@ class Web3Store extends Reactionable(Web3providerStore) {
   @computed
   get puppersOwned() {
     let myPuppers: number[] = [];
-    if (this.address && this.address in this.addressToPuppers!) {
-      myPuppers = this.addressToPuppers![this.address].tokenIds;
+    if (this.address && this.addressToPuppers) {
+      const lowerAddress = this.address.toLowerCase();
+      // Normalize key lookup to handle mixed-case address inconsistency between
+      // wagmi (checksummed) and server DB (as-is from ethers event args)
+      const matchKey = Object.keys(this.addressToPuppers).find(
+        k => k.toLowerCase() === lowerAddress
+      );
+      if (matchKey) {
+        myPuppers = this.addressToPuppers[matchKey].tokenIds;
+      }
     }
-    // Debug logging
-    console.log('🔍 puppersOwned check:', {
-      address: this.address,
-      addressToPuppers: this.addressToPuppers,
-      myPuppers: myPuppers,
-      length: myPuppers.length
-    });
     return myPuppers;
   }
 
@@ -353,14 +350,11 @@ class Web3Store extends Reactionable(Web3providerStore) {
   }
 
   async refreshPupperBalance() {
-    try {
-      const balance = await this.getPupperBalance();
+    const balance = await this.getPupperBalance();
+    if (balance >= 0) {
       this.setPupperBalance(balance);
-    } catch (e) {
-      const { message } = e as EthersContractError;
-      this.setPupperBalance(0);
-      showErrorToast(message);
     }
+    // On error (-1): leave previous balance in place, don't overwrite with bad data
   }
 
   async getDogBalance() {
@@ -386,12 +380,12 @@ class Web3Store extends Reactionable(Web3providerStore) {
     if (!this.address) return 0;
 
     try {
-      const res = await Http.get(`/v1/px/balance/${this.address}`);
+      const res = await throttledGet(`/v1/px/balance/${this.address}`);
       console.log('✅ Pupper balance from API:', res.data.balance);
       return res.data.balance;
     } catch (error) {
       console.error('❌ Failed to fetch pupper balance:', error);
-      return 0;
+      return -1;
     }
   }
 
@@ -408,6 +402,10 @@ class Web3Store extends Reactionable(Web3providerStore) {
     return this.dogContract!.allowance(this.address!, this.pxContractAddress);
   }
 
+  async getPxLockAmountPerPixel(): Promise<BigNumber> {
+    return this.pxContract!.tokenLockAmounts(this.dogContractAddress);
+  }
+
   async getDogToAccount() {
     const freePixelsInDOG = 50;
     //@ts-ignore
@@ -416,7 +414,7 @@ class Web3Store extends Reactionable(Web3providerStore) {
 
   async getDogLocked() {
     console.log(`Fetching locked DOG balance from contract address: ${this.dogContractAddress}`);
-    const res = await Http.get("/v1/dog/locked");
+    const res = await throttledGet("/v1/dog/locked");
     return res.data.balance;
   }
 
@@ -467,7 +465,7 @@ class Web3Store extends Reactionable(Web3providerStore) {
       throw new Error("PX contract not initialized");
     }
     //@ts-ignore - claimReservedTokensBatch is added in contract update
-    return this.pxContract.claimReservedTokensBatch(tokenIds);
+    return this.pxContract.claimReservedTokensBatch(tokenIds, this.dogContractAddress);
   }
 
   async canClaimReservedToken(tokenId: number, user: string) {
@@ -475,6 +473,18 @@ class Web3Store extends Reactionable(Web3providerStore) {
       throw new Error("PX contract not initialized");
     }
     return this.pxContract.canClaimReservedToken(tokenId, user);
+  }
+
+  async getOwnedEligibleV3Tokens(tokenIds: number[], address: string): Promise<number[]> {
+    if (!this.pxContract) return [];
+    const results = await Promise.allSettled(
+      tokenIds.map(id =>
+        this.pxContract!.ownerOf(id).then((owner: string) => ({ id, owner }))
+      )
+    );
+    return results
+      .filter(r => r.status === "fulfilled" && (r as PromiseFulfilledResult<{ id: number; owner: string }>).value.owner.toLowerCase() === address.toLowerCase())
+      .map(r => (r as PromiseFulfilledResult<{ id: number; owner: string }>).value.id);
   }
 
   pupperToIndexLocal(pupper: number) {
@@ -728,7 +738,11 @@ class Web3Store extends Reactionable(Web3providerStore) {
   async getMigrationEligibility(address: string): Promise<{ mainnet: number[]; base: number[] }> {
     try {
       const response = await Http.get(`/v1/migration/eligible/${address}`);
-      return response.data;
+      const data = response.data;
+      return {
+        mainnet: data.mainnet || [],
+        base: [...(data.base || []), ...(data['base-sepolia'] || [])],
+      };
     } catch (error) {
       console.error("Failed to fetch migration eligibility:", error);
       // Return empty if endpoint not available yet

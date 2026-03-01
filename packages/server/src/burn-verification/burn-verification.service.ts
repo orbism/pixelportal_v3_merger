@@ -1,8 +1,9 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Contract, JsonRpcProvider } from 'ethers';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Configuration } from '../config/configuration';
-import { LEGACY_PX_ABI } from '../contracts/legacyAbi';
+import { LEGACY_PX_ABI } from '../contracts/legacyContracts';
 import * as contractData from '../contracts/abi.json';
 import { MigrationService, SnapshotEntry } from '../migration/migration.service';
 import { OwnTheDogeContractService } from '../ownthedoge-contracts/ownthedoge-contracts.service';
@@ -23,9 +24,11 @@ export class BurnVerificationService implements OnModuleInit {
   private readonly logger = new Logger(BurnVerificationService.name);
 
   private ethereumProvider: JsonRpcProvider | null = null;
+  private sepoliaProvider: JsonRpcProvider | null = null;
   private baseProvider: JsonRpcProvider | null = null;
   private baseSepoliaProvider: JsonRpcProvider | null = null;
   private v1Contract: Contract | null = null;
+  private v1TestnetContract: Contract | null = null;
   private v2Contract: Contract | null = null;
   private v2TestnetContract: Contract | null = null;
 
@@ -40,17 +43,17 @@ export class BurnVerificationService implements OnModuleInit {
   }
 
   private initializeProviders() {
-    const alchemyKey = this.configService.get('alchemyKey');
+    const infuraKey = this.configService.get('infuraKey');
     const legacyContracts = this.configService.get('legacyContracts');
 
-    if (!alchemyKey) {
-      this.logger.warn('ALCHEMY_KEY not configured - burn verification disabled');
+    if (!infuraKey) {
+      this.logger.warn('INFURA_KEY not configured - burn verification disabled');
       return;
     }
 
     // Initialize Ethereum mainnet provider for V1 burn checks
     try {
-      const ethereumRpc = `https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`;
+      const ethereumRpc = `https://mainnet.infura.io/v3/${infuraKey}`;
       this.ethereumProvider = new JsonRpcProvider(ethereumRpc);
       this.v1Contract = new Contract(
         legacyContracts.v1.address,
@@ -62,9 +65,23 @@ export class BurnVerificationService implements OnModuleInit {
       this.logger.error('Failed to initialize Ethereum provider:', error);
     }
 
+    // Initialize Ethereum Sepolia provider for V1 testnet burn checks
+    try {
+      const sepoliaRpc = `https://sepolia.infura.io/v3/${infuraKey}`;
+      this.sepoliaProvider = new JsonRpcProvider(sepoliaRpc);
+      this.v1TestnetContract = new Contract(
+        legacyContracts.v1Testnet.address,
+        LEGACY_PX_ABI,
+        this.sepoliaProvider,
+      );
+      this.logger.log('Ethereum Sepolia provider initialized for V1 testnet burn verification');
+    } catch (error) {
+      this.logger.error('Failed to initialize Ethereum Sepolia provider:', error);
+    }
+
     // Initialize Base mainnet provider for V2 burn checks
     try {
-      const baseRpc = `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`;
+      const baseRpc = `https://base-mainnet.infura.io/v3/${infuraKey}`;
       this.baseProvider = new JsonRpcProvider(baseRpc);
       this.v2Contract = new Contract(
         legacyContracts.v2.address,
@@ -77,31 +94,40 @@ export class BurnVerificationService implements OnModuleInit {
     }
 
     // Initialize Base Sepolia provider for V2 testnet burn checks
-    // Read contract address from abi.json deployment data
-    const baseSepoliaContract = contractData?.['84532']?.['base-sepolia']?.contracts?.PX;
-    if (baseSepoliaContract?.address) {
+    const v2TestnetAddress = legacyContracts.v2Testnet?.address;
+    if (v2TestnetAddress) {
       try {
-        const baseSepoliaRpc = `https://base-sepolia.g.alchemy.com/v2/${alchemyKey}`;
+        const baseSepoliaRpc = `https://base-sepolia.infura.io/v3/${infuraKey}`;
         this.baseSepoliaProvider = new JsonRpcProvider(baseSepoliaRpc);
         this.v2TestnetContract = new Contract(
-          baseSepoliaContract.address,
+          v2TestnetAddress,
           LEGACY_PX_ABI,
           this.baseSepoliaProvider,
         );
-        this.logger.log(`Base Sepolia provider initialized for testnet burn verification (${baseSepoliaContract.address})`);
+        this.logger.log(`Base Sepolia provider initialized for testnet burn verification (${v2TestnetAddress})`);
       } catch (error) {
         this.logger.error('Failed to initialize Base Sepolia provider:', error);
       }
     }
+
+    this.logger.log(
+      `Provider init summary: v1=${!!this.v1Contract}, v1Testnet=${!!this.v1TestnetContract}, v2=${!!this.v2Contract}, v2Testnet=${!!this.v2TestnetContract}`,
+    );
+
+    const burnKey = this.configService.get('burnVerificationKey');
+    this.logger.log(`Infura key: ${infuraKey ? 'configured' : 'MISSING'}`);
+    this.logger.log(`Burn verification wallet: ${burnKey ? 'configured' : 'MISSING - setBurnFlags will fail'}`);
   }
 
   /**
    * Get the contract for a given network
    */
-  private getContractForNetwork(network: 'mainnet' | 'base' | 'base-sepolia'): Contract | null {
+  private getContractForNetwork(network: 'mainnet' | 'sepolia' | 'base' | 'base-sepolia'): Contract | null {
     switch (network) {
       case 'mainnet':
         return this.v1Contract;
+      case 'sepolia':
+        return this.v1TestnetContract;
       case 'base':
         return this.v2Contract;
       case 'base-sepolia':
@@ -115,7 +141,7 @@ export class BurnVerificationService implements OnModuleInit {
    * Check if a token is burned on the legacy contract
    * A token is considered burned if ownerOf() reverts
    */
-  async isTokenBurned(tokenId: number, network: 'mainnet' | 'base' | 'base-sepolia'): Promise<boolean> {
+  async isTokenBurned(tokenId: number, network: 'mainnet' | 'sepolia' | 'base' | 'base-sepolia'): Promise<boolean> {
     const contract = this.getContractForNetwork(network);
 
     if (!contract) {
@@ -123,8 +149,9 @@ export class BurnVerificationService implements OnModuleInit {
     }
 
     try {
-      await contract.ownerOf(tokenId);
-      return false; // Token exists, not burned
+      const owner = await contract.ownerOf(tokenId);
+      // Some contracts return address(0) instead of reverting for burned tokens
+      return owner === '0x0000000000000000000000000000000000000000';
     } catch {
       return true; // ownerOf reverted, token is burned
     }
@@ -137,7 +164,7 @@ export class BurnVerificationService implements OnModuleInit {
    */
   async verifyAndSetBurnFlags(
     tokenIds: number[],
-    network: 'mainnet' | 'base' | 'base-sepolia',
+    network: 'mainnet' | 'sepolia' | 'base' | 'base-sepolia',
   ): Promise<VerifyBurnsResult> {
     const results: TokenResult[] = [];
     const burnedTokenIds: number[] = [];
@@ -225,17 +252,29 @@ export class BurnVerificationService implements OnModuleInit {
     return { results, txHash };
   }
 
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async sweepCron() {
+    this.logger.log('Cron: running sweepUnconfirmedBurns');
+    try {
+      const result = await this.sweepUnconfirmedBurns();
+      this.logger.log(`Cron sweep complete: ${result.summary.total} new flags set`);
+    } catch (error) {
+      this.logger.error(`Cron sweep failed: ${error.message}`);
+    }
+  }
+
   /**
    * Sweep all snapshot entries and verify burns for any that are reserved but unconfirmed.
    * Called by the cron sweep endpoint.
    */
   async sweepUnconfirmedBurns(): Promise<{
-    results: { mainnet: VerifyBurnsResult | null; base: VerifyBurnsResult | null; 'base-sepolia': VerifyBurnsResult | null };
-    summary: { mainnet: number; base: number; 'base-sepolia': number; total: number };
+    results: { mainnet: VerifyBurnsResult | null; sepolia: VerifyBurnsResult | null; base: VerifyBurnsResult | null; 'base-sepolia': VerifyBurnsResult | null };
+    summary: { mainnet: number; sepolia: number; base: number; 'base-sepolia': number; total: number };
   }> {
     const allEntries = this.migrationService.getAllSnapshotEntries();
 
     const mainnetIds: number[] = [];
+    const sepoliaIds: number[] = [];
     const baseIds: number[] = [];
     const baseSepoliaIds: number[] = [];
 
@@ -244,6 +283,7 @@ export class BurnVerificationService implements OnModuleInit {
         const reservation = await this.pixelsService.getReservation(entry.id);
         if (!reservation.burnConfirmed) {
           if (entry.network === 'mainnet') mainnetIds.push(entry.id);
+          else if (entry.network === 'sepolia') sepoliaIds.push(entry.id);
           else if (entry.network === 'base') baseIds.push(entry.id);
           else if (entry.network === 'base-sepolia') baseSepoliaIds.push(entry.id);
         }
@@ -253,19 +293,25 @@ export class BurnVerificationService implements OnModuleInit {
     }
 
     this.logger.log(
-      `Sweep: ${mainnetIds.length} mainnet, ${baseIds.length} base, ${baseSepoliaIds.length} base-sepolia unconfirmed`,
+      `Sweep: ${mainnetIds.length} mainnet, ${sepoliaIds.length} sepolia, ${baseIds.length} base, ${baseSepoliaIds.length} base-sepolia unconfirmed`,
     );
 
     const results: {
       mainnet: VerifyBurnsResult | null;
+      sepolia: VerifyBurnsResult | null;
       base: VerifyBurnsResult | null;
       'base-sepolia': VerifyBurnsResult | null;
-    } = { mainnet: null, base: null, 'base-sepolia': null };
-    const summary = { mainnet: 0, base: 0, 'base-sepolia': 0, total: 0 };
+    } = { mainnet: null, sepolia: null, base: null, 'base-sepolia': null };
+    const summary = { mainnet: 0, sepolia: 0, base: 0, 'base-sepolia': 0, total: 0 };
 
     if (mainnetIds.length > 0) {
       results.mainnet = await this.verifyAndSetBurnFlags(mainnetIds, 'mainnet');
       summary.mainnet = results.mainnet.results.filter((r) => r.status === 'flag_set').length;
+    }
+
+    if (sepoliaIds.length > 0) {
+      results.sepolia = await this.verifyAndSetBurnFlags(sepoliaIds, 'sepolia');
+      summary.sepolia = results.sepolia.results.filter((r) => r.status === 'flag_set').length;
     }
 
     if (baseIds.length > 0) {
@@ -280,7 +326,7 @@ export class BurnVerificationService implements OnModuleInit {
       ).length;
     }
 
-    summary.total = summary.mainnet + summary.base + summary['base-sepolia'];
+    summary.total = summary.mainnet + summary.sepolia + summary.base + summary['base-sepolia'];
     this.logger.log(`Sweep complete: ${summary.total} new burn flags set`);
 
     return { results, summary };

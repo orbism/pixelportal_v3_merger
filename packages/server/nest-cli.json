@@ -9,7 +9,7 @@
       "assets/fonts/*.ttf_0.png",
       "views/*.hbs",
       "public/*.txt",
-      "migration-snapshot.json"
+      "migration/snapshot.json"
     ]
   }
 }

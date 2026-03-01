@@ -200,8 +200,11 @@ class MintPixelsDialogStore extends Reactionable(Navigable<MintModalView, Constr
     });
     
     if (this.srcCurrency === "DOG") {
-      const dogAmount = Number(ethers.utils.formatUnits(AppStore.web3.DOG_TO_PIXEL_SATOSHIS.mul(this.pixelCount), 18));
-      
+      // Read on-chain tokenLockAmounts instead of using hardcoded DOG_TO_PIXEL_SATOSHIS
+      const lockAmountPerPixel = await AppStore.web3.getPxLockAmountPerPixel();
+      const totalDogNeeded = lockAmountPerPixel.mul(this.pixelCount);
+      const dogAmount = Number(ethers.utils.formatUnits(totalDogNeeded, 18));
+
       runInAction(() => {
         this.recentQuote = {
           srcCurrency: this.srcCurrency,
@@ -214,13 +217,13 @@ class MintPixelsDialogStore extends Reactionable(Navigable<MintModalView, Constr
           maxPixelAmount: this.srcCurrencyBalance.humanReadable
             ? Math.floor(
                 this.srcCurrencyBalance.humanReadable /
-                  Number(ethers.utils.formatUnits(AppStore.web3.DOG_TO_PIXEL_SATOSHIS, 18)),
+                  Number(ethers.utils.formatUnits(lockAmountPerPixel, 18)),
               )
             : 0,
-          _srcCurrencyAmount: AppStore.web3.DOG_TO_PIXEL_SATOSHIS.mul(this.pixelCount),
+          _srcCurrencyAmount: totalDogNeeded,
           _srcCurrencyFee: BigNumber.from(0),
-          _srcCurrencyTotal: AppStore.web3.DOG_TO_PIXEL_SATOSHIS.mul(this.pixelCount),
-          _dogAmount: AppStore.web3.DOG_TO_PIXEL_SATOSHIS.mul(this.pixelCount),
+          _srcCurrencyTotal: totalDogNeeded,
+          _dogAmount: totalDogNeeded,
         };
       });
     } else {

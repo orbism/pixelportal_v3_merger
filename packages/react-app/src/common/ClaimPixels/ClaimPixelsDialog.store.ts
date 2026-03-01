@@ -19,6 +19,7 @@ export enum ClaimPixelsModalView {
   ReadyToClaim = "ready_to_claim",
   ClaimingPixels = "claiming",
   Complete = "complete",
+  AlreadyClaimed = "already_claimed",
 }
 
 export type BurnNetwork = "mainnet" | "base";
@@ -34,6 +35,10 @@ interface MigrationEligibility {
 }
 
 const STORAGE_KEY_PREFIX = "px_claim_state_";
+const TAG = "[ClaimPixels]";
+const log  = (...args: any[]) => console.log(TAG, ...args);
+const warn = (...args: any[]) => console.warn(TAG, ...args);
+const err  = (...args: any[]) => console.error(TAG, ...args);
 
 class ClaimPixelsDialogStore extends Reactionable(
   Navigable<ClaimPixelsModalView, Constructor>(EmptyClass),
@@ -196,29 +201,39 @@ class ClaimPixelsDialogStore extends Reactionable(
     return `${STORAGE_KEY_PREFIX}${address.toLowerCase()}`;
   }
 
-  private saveToStorage() {
+  private saveToStorage(extra?: { claimed: true; claimedIds: number[] }) {
     const key = this.getStorageKey();
     if (!key) return;
     try {
-      localStorage.setItem(
-        key,
-        JSON.stringify({
-          burnedMainnet: this.burnedMainnet,
-          burnedBase: this.burnedBase,
-        }),
-      );
+      const value = {
+        burnedMainnet: this.burnedMainnet,
+        burnedBase: this.burnedBase,
+        ...(extra ?? {}),
+      };
+      localStorage.setItem(key, JSON.stringify(value));
+      log("Saved to storage:", value);
     } catch (e) {
-      console.warn("[ClaimPixels] Failed to save state to localStorage:", e);
+      warn("Failed to save state to localStorage:", e);
     }
   }
 
-  private loadFromStorage(): { burnedMainnet: number[]; burnedBase: number[] } | null {
+  private loadFromStorage(): {
+    burnedMainnet: number[];
+    burnedBase: number[];
+    claimed?: boolean;
+    claimedIds?: number[];
+  } | null {
     const key = this.getStorageKey();
     if (!key) return null;
     try {
       const raw = localStorage.getItem(key);
-      if (!raw) return null;
-      return JSON.parse(raw);
+      if (!raw) {
+        log("No stored state found");
+        return null;
+      }
+      const parsed = JSON.parse(raw);
+      log("Loaded from storage:", parsed);
+      return parsed;
     } catch {
       return null;
     }
@@ -228,6 +243,7 @@ class ClaimPixelsDialogStore extends Reactionable(
     const key = this.getStorageKey();
     if (!key) return;
     localStorage.removeItem(key);
+    log("Storage cleared");
   }
 
   // ============================================
@@ -235,7 +251,7 @@ class ClaimPixelsDialogStore extends Reactionable(
   // ============================================
 
   async init() {
-    console.log("ClaimPixelsDialog.init() called");
+    log("init() address:", AppStore.web3.address);
     this.pushNavigation(ClaimPixelsModalView.Overview);
 
     runInAction(() => {
@@ -243,7 +259,6 @@ class ClaimPixelsDialogStore extends Reactionable(
     });
 
     try {
-      // Load eligibility from snapshot (required)
       await this.loadEligibility();
 
       // Restore persisted burn state
@@ -253,6 +268,7 @@ class ClaimPixelsDialogStore extends Reactionable(
           this.burnedMainnet = stored.burnedMainnet;
           this.burnedBase = stored.burnedBase;
         });
+        log("Restored burned state mainnet:", stored.burnedMainnet, "base:", stored.burnedBase);
       }
 
       // Load DOG balance on Base
@@ -261,34 +277,62 @@ class ClaimPixelsDialogStore extends Reactionable(
         runInAction(() => {
           this.dogBalanceOnBase = dogBal;
         });
+        log("DOG balance on Base:", ethers.utils.formatEther(dogBal), "DOG");
       } catch (e) {
-        console.warn("[ClaimPixels] Failed to load DOG balance:", e);
+        warn("Failed to load DOG balance:", e);
       }
 
       // Load claimable pixels from V3 contract
       try {
         await this.loadClaimablePixels();
       } catch (error) {
-        console.warn("Could not load claimable pixels (this is OK if none are reserved yet):", error);
+        warn("Could not load claimable pixels (OK if none reserved yet):", error);
       }
 
-      // Smart routing based on loaded state
+      // Smart routing decision
+      log("Routing decision claimable:", this.claimablePixels.length,
+        "| pending:", this.pendingReservations.length,
+        "| basePixelsToBurn:", this.basePixelsToBurn.length);
+
       if (this.claimablePixels.length > 0) {
         if (this.basePixelsToBurn.length > 0) {
-          // V2 still needs burning — stay on Overview
+          log("route: Overview (V2 burn still needed)");
         } else {
+          log("route: ReadyToClaim");
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.ReadyToClaim);
         }
-      } else if (this.pendingReservations.length > 0) {
+      } else if (this.pendingReservations.length > 0 && (this.burnedMainnet.length > 0 || this.burnedBase.length > 0)) {
+        log("route: WaitingForConfirmation (burn pending on server)");
         this.destroyNavigation();
         this.pushNavigation(ClaimPixelsModalView.WaitingForConfirmation);
         this.startPollingForBurnConfirmation();
+      } else {
+        // Primary check: localStorage flag written on successful claim
+        const localClaimed = stored?.claimed === true;
+        // Fallback A: server-indexed V3 ownership
+        const allEligible = [...this.eligibility.mainnet, ...this.eligibility.base];
+        const ownedOnV3 = new Set(AppStore.web3.puppersOwned);
+        const serverClaimed = allEligible.length > 0 && allEligible.every(id => ownedOnV3.has(id));
+        // Fallback B: direct V3 contract ownerOf check (works even with empty localStorage + unindexed server)
+        let contractClaimed = false;
+        if (!localClaimed && !serverClaimed && allEligible.length > 0 && AppStore.web3.address) {
+          const owned = await AppStore.web3.getOwnedEligibleV3Tokens(allEligible, AppStore.web3.address);
+          contractClaimed = owned.length > 0;
+        }
+
+        if (localClaimed || serverClaimed || contractClaimed) {
+          log("route: AlreadyClaimed",
+            localClaimed ? "(local flag)" : serverClaimed ? "(server ownership)" : "(contract ownerOf)");
+          this.destroyNavigation();
+          this.pushNavigation(ClaimPixelsModalView.AlreadyClaimed);
+        } else {
+          log("route: Overview (no actionable state)");
+        }
       }
-      // else: stay on Overview
 
     } catch (error) {
-      console.error("Init failed:", error);
+      err("init() failed:", error);
       showErrorToast("Failed to load claim data");
     } finally {
       runInAction(() => {
@@ -300,40 +344,36 @@ class ClaimPixelsDialogStore extends Reactionable(
   async loadEligibility() {
     try {
       const address = AppStore.web3.address;
-      console.log("📋 Loading migration eligibility for:", address);
+      log("loadEligibility() address:", address);
 
       if (!address) {
-        console.warn("⚠️ No wallet address connected");
+        warn("No wallet address connected");
         return;
       }
 
       const data = await AppStore.web3.getMigrationEligibility(address);
-
-      console.log("✅ Eligibility loaded:", JSON.stringify(data));
-      console.log(`   Mainnet pixels: ${data.mainnet.length}`, data.mainnet);
-      console.log(`   Base pixels: ${data.base.length}`, data.base);
+      log("Eligibility result mainnet:", data.mainnet, "base:", data.base);
 
       runInAction(() => {
         this.eligibility = data;
       });
     } catch (error: any) {
-      console.error("❌ Failed to load eligibility:", error);
-      console.error("   Error details:", error.message);
+      err("loadEligibility() failed:", error.message);
       throw error;
     }
   }
 
   async loadClaimablePixels() {
     try {
-      console.log("Loading claimable pixels for:", AppStore.web3.address);
-
       const allEligibleTokenIds = [
         ...this.eligibility.mainnet,
         ...this.eligibility.base,
       ];
 
+      log("loadClaimablePixels() checking", allEligibleTokenIds.length, "token IDs:", allEligibleTokenIds);
+
       if (allEligibleTokenIds.length === 0) {
-        console.log("No eligible tokens to check");
+        log("No eligible tokens to check");
         return;
       }
 
@@ -341,6 +381,8 @@ class ClaimPixelsDialogStore extends Reactionable(
         AppStore.web3.address!,
         allEligibleTokenIds
       );
+
+      log("getReservedTokensForUser raw result tokenIds:", result.tokenIds.map(t => t.toString()), "burnConfirmed:", result.burnConfirmed);
 
       const claimablePixels: ReservedPixel[] = [];
       const pendingReservations: ReservedPixel[] = [];
@@ -356,17 +398,16 @@ class ClaimPixelsDialogStore extends Reactionable(
         }
       }
 
-      console.log("Claimable pixels found:", claimablePixels);
-      console.log("Pending reservations found:", pendingReservations);
+      log("Claimable (burnConfirmed=true):", claimablePixels.map(p => p.tokenId));
+      log("Pending (burnConfirmed=false):", pendingReservations.map(p => p.tokenId));
 
       runInAction(() => {
         this.claimablePixels = claimablePixels;
         this.pendingReservations = pendingReservations;
-        // Force-select all claimable pixels
         this.selectedPixels = claimablePixels.map(p => p.tokenId);
       });
     } catch (error) {
-      console.error("Failed to load claimable pixels:", error);
+      err("loadClaimablePixels() failed:", error);
     }
   }
 
@@ -416,8 +457,10 @@ class ClaimPixelsDialogStore extends Reactionable(
         ? AppStore.web3.v1ChainId
         : AppStore.web3.v2ChainId;
 
+      log(`confirmBurn() network: ${network}, tokenIds: [${tokenIds}], currentChain: ${currentChainId}, requiredChain: ${requiredChainId}`);
+
       if (currentChainId !== requiredChainId) {
-        console.log(`Need to switch to chain ${requiredChainId}`);
+        log(`Switching to chain ${requiredChainId}...`);
         const switched = await AppStore.web3.switchNetwork(requiredChainId);
         if (!switched) {
           throw new Error(`Please switch to ${AppStore.web3.getNetworkDisplayName(requiredChainId)}`);
@@ -432,6 +475,7 @@ class ClaimPixelsDialogStore extends Reactionable(
         tx = await AppStore.web3.burnV2Pixels(tokenIds);
       }
 
+      log("Burn tx submitted:", tx.hash);
       runInAction(() => {
         this.hasUserSignedTx = true;
         this.txHash = tx.hash;
@@ -440,7 +484,7 @@ class ClaimPixelsDialogStore extends Reactionable(
       showDebugToast(`Burning ${tokenIds.length} pixels...`);
 
       const receipt = await tx.wait();
-      console.log("Burn confirmed:", receipt.transactionHash);
+      log("Burn confirmed in block:", receipt.blockNumber, "tx:", receipt.transactionHash);
 
       runInAction(() => {
         if (network === "mainnet") {
@@ -456,18 +500,23 @@ class ClaimPixelsDialogStore extends Reactionable(
       showSuccessToast(`Successfully burned ${tokenIds.length} pixels on ${network === "mainnet" ? "Ethereum" : "Base"}`);
 
       // Fire-and-forget fast-path verification so polling finds it sooner
-      const serverNetwork = (network === "base" && AppStore.web3.isTestnet) ? "base-sepolia" : network;
+      const serverNetwork = AppStore.web3.isTestnet
+        ? (network === "mainnet" ? "sepolia" : "base-sepolia")
+        : network;
+      log("Firing fast-path verify-burns for network:", serverNetwork);
       Http.post("/v1/migration/verify-burns", {
         tokenIds,
         network: serverNetwork,
-      }).catch(e => console.warn("[ClaimPixels] verify-burns fast-path failed:", e));
+      })
+        .then(res => log("Fast-path verify-burns response:", res.data))
+        .catch(e => warn("Fast-path verify-burns failed (polling will catch it):", e.message));
 
       this.destroyNavigation();
       this.pushNavigation(ClaimPixelsModalView.WaitingForConfirmation);
       this.startPollingForBurnConfirmation();
 
     } catch (error: any) {
-      console.error("Burn failed:", error);
+      err("confirmBurn() failed:", error.message);
       Sentry.captureException(error);
 
       runInAction(() => {
@@ -486,12 +535,14 @@ class ClaimPixelsDialogStore extends Reactionable(
   // Polling for Burn Confirmation
   // ============================================
 
+  private pollCount = 0;
+
   startPollingForBurnConfirmation() {
+    this.pollCount = 0;
+    log("poll: starting (30s interval)");
     this.pollIntervalId = setInterval(async () => {
       await this.checkBurnConfirmation();
-    }, 10000);
-
-    // Also check immediately
+    }, 30000);
     this.checkBurnConfirmation();
   }
 
@@ -499,28 +550,36 @@ class ClaimPixelsDialogStore extends Reactionable(
     if (this.pollIntervalId) {
       clearInterval(this.pollIntervalId);
       this.pollIntervalId = null;
+      log("poll: stopped");
     }
   }
 
   async checkBurnConfirmation() {
+    this.pollCount++;
+    log(`poll #${this.pollCount}: checking...`);
+
     try {
       await this.loadClaimablePixels();
+
+      log(`poll #${this.pollCount}: claimable=${this.claimablePixels.length}, pending=${this.pendingReservations.length}, baseStillToBurn=${this.basePixelsToBurn.length}`);
 
       if (this.claimablePixels.length > 0) {
         this.stopPolling();
         if (this.basePixelsToBurn.length > 0) {
-          // V2 pixels still need burning — go back to Overview
+          log("poll: burn confirmed but V2 still needed routing to Overview");
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.Overview);
         } else {
-          // All burns done — switch to Base and go to ReadyToClaim
+          log("poll: all burns confirmed routing to ReadyToClaim");
           AppStore.web3.switchNetwork(AppStore.web3.targetChainId);
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.ReadyToClaim);
         }
+      } else {
+        log(`poll #${this.pollCount}: not confirmed yet, still waiting`);
       }
     } catch (error) {
-      console.error("Error checking burn confirmation:", error);
+      err("checkBurnConfirmation() failed:", error);
     }
   }
 
@@ -529,6 +588,8 @@ class ClaimPixelsDialogStore extends Reactionable(
   // ============================================
 
   async handleClaimSubmit() {
+    log("claim: handleClaimSubmit() pixels:", this.selectedPixels);
+
     if (this.selectedPixels.length === 0) {
       showErrorToast("No pixels to claim");
       return;
@@ -536,7 +597,10 @@ class ClaimPixelsDialogStore extends Reactionable(
 
     // Ensure user is on the V3 network (Base)
     const currentChainId = await AppStore.web3.getCurrentChainId();
+    log(`claim: currentChain=${currentChainId}, targetChain=${AppStore.web3.targetChainId}`);
+
     if (currentChainId !== AppStore.web3.targetChainId) {
+      log("claim: switching to target chain...");
       const switched = await AppStore.web3.switchNetwork(AppStore.web3.targetChainId);
       if (!switched) {
         showErrorToast(`Please switch to ${AppStore.web3.getNetworkDisplayName(AppStore.web3.targetChainId)}`);
@@ -548,15 +612,22 @@ class ClaimPixelsDialogStore extends Reactionable(
     // DOG approval check
     try {
       const allowance = await AppStore.web3.getPxDogSpendAllowance();
-      const totalNeeded = this.totalDogNeeded;
+      const lockAmountPerPixel = await AppStore.web3.getPxLockAmountPerPixel();
+      const totalNeeded = lockAmountPerPixel.mul(this.claimablePixels.length);
+      log(`claim: DOG allowance=${ethers.utils.formatEther(allowance)}, needed=${ethers.utils.formatEther(totalNeeded)}, sufficient=${allowance.gte(totalNeeded)}`);
 
       if (allowance.lt(totalNeeded)) {
+        log("claim: approval needed navigating to ApprovingDOG");
         this.pushNavigation(ClaimPixelsModalView.ApprovingDOG);
         const approveTx = await AppStore.web3.approvePxSpendDog(totalNeeded);
+        log("claim: approve tx submitted:", approveTx.hash);
         await approveTx.wait();
+        log("claim: approve tx confirmed");
+      } else {
+        log("claim: DOG already approved, skipping approval step");
       }
     } catch (error: any) {
-      console.error("DOG approval failed:", error);
+      err("claim: DOG approval failed:", error.message);
       showErrorToast("DOG approval failed: " + (error.message || "Unknown error"));
       return;
     }
@@ -579,11 +650,14 @@ class ClaimPixelsDialogStore extends Reactionable(
     });
 
     const claimedIds: number[] = [];
+    log(`claim: ${chunks.length} batch(es) of up to ${BATCH_SIZE}`);
 
-    for (const chunk of chunks) {
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      log(`claim: batch ${i + 1}/${chunks.length} tokens: [${chunk}]`);
       try {
-        console.log(`Claiming batch of ${chunk.length} pixels:`, chunk);
         const tx = await AppStore.web3.claimReservedTokensBatch(chunk);
+        log(`claim: batch ${i + 1} tx submitted:`, tx.hash);
 
         runInAction(() => {
           this.hasUserSignedTx = true;
@@ -591,7 +665,8 @@ class ClaimPixelsDialogStore extends Reactionable(
         });
 
         showDebugToast(`Claiming ${chunk.length} pixel(s)...`);
-        await tx.wait();
+        const receipt = await tx.wait();
+        log(`claim: batch ${i + 1} confirmed in block:`, receipt.blockNumber);
 
         runInAction(() => {
           this.claimProgress.claimed += chunk.length;
@@ -599,12 +674,14 @@ class ClaimPixelsDialogStore extends Reactionable(
 
         claimedIds.push(...chunk);
       } catch (e: any) {
-        console.error(`Batch claim failed for chunk ${chunk}:`, e);
+        err(`claim: batch ${i + 1} failed:`, e.message, "tokens:", chunk);
         runInAction(() => {
           this.claimBatchErrors = [...this.claimBatchErrors, ...chunk];
         });
       }
     }
+
+    log(`claim: done claimed: [${claimedIds}], errors: [${this.claimBatchErrors}]`);
 
     if (this.claimBatchErrors.length === 0 && claimedIds.length > 0) {
       runInAction(() => {
@@ -615,9 +692,8 @@ class ClaimPixelsDialogStore extends Reactionable(
       this.destroyNavigation();
       this.pushNavigation(ClaimPixelsModalView.Complete);
       showSuccessToast(`Successfully claimed ${claimedIds.length} pixel(s)!`);
-      this.clearStorage();
+      this.saveToStorage({ claimed: true, claimedIds: claimedIds });
     } else if (claimedIds.length > 0) {
-      // Partial success — some failed
       runInAction(() => {
         this.claimedPixels = claimedIds;
       });

@@ -13,7 +13,7 @@ import { ToastContainer } from "./DSL/Toast/Toast";
 
 import { CreateConfigParameters, WagmiProvider, createConfig, http } from "wagmi";
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
-import { base, baseSepolia, foundry, type Chain } from "wagmi/chains";
+import { base, baseSepolia, foundry, mainnet, sepolia, type Chain } from "wagmi/chains";
 import { coinbaseWallet, magicEdenWallet } from "@rainbow-me/rainbowkit/wallets";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -93,11 +93,14 @@ const connectors = connectorsForWallets(
   },
 );
 
+const l1Chains = envConfig.isProduction ? [mainnet] : [sepolia];
+
 const config = createConfig({
   connectors,
-  chains: [targetChain as Chain],
+  chains: [targetChain as Chain, ...l1Chains],
   transports: {
     [targetChain.id]: http(),
+    ...Object.fromEntries(l1Chains.map(c => [c.id, http()])),
   },
 });
 

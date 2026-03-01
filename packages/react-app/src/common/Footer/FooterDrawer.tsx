@@ -13,11 +13,15 @@ import Button from "../../DSL/Button/Button";
 import AppStore from "../../store/App.store";
 import { readLinks, socialLinks, dooLinks, tradeLinks } from "./Links";
 import dogeface from '../../images/dogeface.png';
+import BugReportModal from "./BugReportModal";
+import CreditsModal from "./CreditsModal";
 
 const MotionBox = motion(Box);
 
 const FooterDrawer = observer(() => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isBugReportOpen, setIsBugReportOpen] = useState(false);
+  const [isCreditsOpen, setIsCreditsOpen] = useState(false);
   const { colorMode } = useColorMode();
   const currentYear = new Date().getFullYear();
 
@@ -25,6 +29,9 @@ const FooterDrawer = observer(() => {
 
   return (
     <>
+      <BugReportModal isOpen={isBugReportOpen} onClose={() => setIsBugReportOpen(false)} />
+      <CreditsModal isOpen={isCreditsOpen} onClose={() => setIsCreditsOpen(false)} />
+
       {/* Overlay */}
       <AnimatePresence>
         {isOpen && (
@@ -81,11 +88,17 @@ const FooterDrawer = observer(() => {
                   <FooterItem title={"$DOG"} items={tradeLinks} />
                 </Grid>
               </Box>
-              <Box pt={4} pb={2}>
+              <HStack pt={4} pb={2} spacing={3} flexWrap="wrap">
                 <Button size="xs" onClick={() => { AppStore.guide.startGuide(); setIsOpen(false); }}>
                   Run Interactive User Guide
                 </Button>
-              </Box>
+                <Button size="xs" onClick={() => { setIsBugReportOpen(true); setIsOpen(false); }}>
+                  Find a bug?!
+                </Button>
+                <Button size="xs" onClick={() => { setIsCreditsOpen(true); setIsOpen(false); }}>
+                  Credits
+                </Button>
+              </HStack>
             </Box>
           </MotionBox>
         )}

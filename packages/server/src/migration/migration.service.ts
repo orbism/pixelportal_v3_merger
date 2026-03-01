@@ -5,7 +5,7 @@ import * as path from 'path';
 export interface SnapshotEntry {
   address: string;
   id: number;
-  network: 'mainnet' | 'base' | 'base-sepolia';
+  network: 'mainnet' | 'sepolia' | 'base' | 'base-sepolia';
 }
 
 export interface EligibilityResult {
@@ -30,8 +30,8 @@ export class MigrationService {
    */
   private loadSnapshot() {
     try {
-      // In compiled output: dist/migration/ -> ../migration-snapshot.json = dist/migration-snapshot.json
-      const snapshotPath = path.join(__dirname, '../migration-snapshot.json');
+      // In compiled output: dist/migration/snapshot.json
+      const snapshotPath = path.join(__dirname, 'snapshot.json');
 
       if (fs.existsSync(snapshotPath)) {
         const data = fs.readFileSync(snapshotPath, 'utf-8');
@@ -70,7 +70,7 @@ export class MigrationService {
 
     for (const entry of this.snapshot) {
       if (entry.address.toLowerCase() === normalizedAddress) {
-        if (entry.network === 'mainnet') {
+        if (entry.network === 'mainnet' || entry.network === 'sepolia') {
           mainnetPixels.push(entry.id);
         } else if (entry.network === 'base') {
           basePixels.push(entry.id);
@@ -129,7 +129,7 @@ export class MigrationService {
    * @param tokenId The token ID to check
    * @param network The network to check ('mainnet' for V1, 'base' for V2, 'base-sepolia' for testnet)
    */
-  isTokenInSnapshot(tokenId: number, network: 'mainnet' | 'base' | 'base-sepolia'): boolean {
+  isTokenInSnapshot(tokenId: number, network: 'mainnet' | 'sepolia' | 'base' | 'base-sepolia'): boolean {
     return this.snapshot.some(
       (entry) => entry.id === tokenId && entry.network === network,
     );

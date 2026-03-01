@@ -1,5 +1,5 @@
 import { Box, Flex, useColorMode, useMultiStyleConfig } from "@chakra-ui/react";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Draggable from "react-draggable";
 import ReactModal from "react-modal";
 import Icon from "../Icon/Icon";
@@ -7,9 +7,12 @@ import { lightOrDarkMode } from "../Theme";
 import Typography, { TVariant } from "../Typography/Typography";
 import "./Modal.css";
 
+let globalZIndex = 10;
+function nextZIndex() { return ++globalZIndex; }
+
 export interface ModalProps extends ReactModal.Props {
   onClose: () => void;
-  size?: "xs" | "sm" | "md" | "lg" | "xl";
+  size?: "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
   renderFooter?: () => JSX.Element;
   title?: string;
   name?: string;
@@ -17,7 +20,7 @@ export interface ModalProps extends ReactModal.Props {
   description?: string;
 }
 
-let styleOverrides: { overlay: object; content: object } = {
+const baseStyleOverrides: { overlay: object; content: object } = {
   overlay: {
     display: "flex",
     justifyContent: "center",
@@ -54,6 +57,27 @@ const Modal = ({
   const chakraStyles = useMultiStyleConfig("Modal", { size: size });
   const { colorMode } = useColorMode();
   const nodeRef = useRef(null);
+  const zRef = useRef(nextZIndex());
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    if (isOpen) {
+      zRef.current = nextZIndex();
+      setTick(t => t + 1);
+    }
+  }, [isOpen]);
+
+  const bringToFront = () => {
+    if (zRef.current < globalZIndex) {
+      zRef.current = nextZIndex();
+      setTick(t => t + 1);
+    }
+  };
+
+  const styleOverrides = {
+    ...baseStyleOverrides,
+    overlay: { ...baseStyleOverrides.overlay, zIndex: zRef.current },
+  };
 
   ReactModal.setAppElement("#root");
 
@@ -67,9 +91,13 @@ const Modal = ({
           ref={nodeRef}
           position={"relative"}
           overflow={"hidden"}
+          resize={"both"}
           zIndex={1}
           width={"100%"}
-          maxWidth={chakraStyles.container.maxWidth as string}
+          minWidth={chakraStyles.container.maxWidth as string}
+          maxWidth={"90vw"}
+          minHeight={"auto"}
+          onMouseDown={bringToFront}
           data-guide-target={name}
         >
           <Box __css={chakraStyles.container}>
@@ -103,7 +131,7 @@ const Modal = ({
                 </Box>
               </Box>
             </Flex>
-            <Box __css={chakraStyles.body}>
+            <Box __css={chakraStyles.body} maxH="70vh" overflowY="auto">
               {title && (
                 <Box __css={chakraStyles.title}>
                   <Typography variant={TVariant.PresStart18}>{title}</Typography>

@@ -48,7 +48,6 @@ class _AppStore {
 
   reinitializeWeb3Store() {
     this.web3 = new Web3Store();
-    this.web3.init();
   }
 
   refreshWeb3Signer() {

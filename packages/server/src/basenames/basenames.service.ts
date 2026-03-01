@@ -58,9 +58,9 @@ export class BasenamesService implements OnModuleInit {
   constructor(private configService: ConfigService) {}
 
   onModuleInit() {
-    const alchemyKey = this.configService.get('alchemyKey');
+    const infuraKey = this.configService.get('infuraKey');
 
-    this.rpc = `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`;
+    this.rpc = `https://base-mainnet.infura.io/v3/${infuraKey}`;
   }
 
   async getBasename(address: string) {
