@@ -56,6 +56,31 @@ class BurnPixelsDialogStore extends Navigable<BurnPixelsModalView, Constructor>(
     try {
       console.log("Attempting to burn pixels with IDs:", this.selectedPixels);
 
+      // Verify selected pixels still exist on-chain before burning
+      const validPixels: number[] = [];
+      for (const pixelId of this.selectedPixels) {
+        try {
+          const owner = await AppStore.web3.pxContract!.ownerOf(pixelId);
+          if (owner.toLowerCase() === AppStore.web3.address?.toLowerCase()) {
+            validPixels.push(pixelId);
+          } else {
+            console.warn(`Pixel ${pixelId} not owned by user (owner: ${owner}), skipping`);
+          }
+        } catch {
+          console.warn(`Pixel ${pixelId} no longer exists on-chain, skipping`);
+        }
+      }
+      if (validPixels.length === 0) {
+        showErrorToast("Selected pixels no longer exist on-chain. Refreshing data...");
+        await AppStore.web3.refreshPixelOwnershipMap();
+        this.popNavigation();
+        return;
+      }
+      if (validPixels.length !== this.selectedPixels.length) {
+        console.warn(`Filtered out ${this.selectedPixels.length - validPixels.length} stale pixels`);
+        this.selectedPixels = validPixels;
+      }
+
       const txMethod = AppStore.web3.pxContract.functions.burnPuppers;
       const estimatedGas = await AppStore.web3.pxContract.estimateGas.burnPuppers(this.selectedPixels);
       const gasLimitSafetyOffset = 80000; 

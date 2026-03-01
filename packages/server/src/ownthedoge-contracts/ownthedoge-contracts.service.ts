@@ -36,6 +36,7 @@ export class OwnTheDogeContractService implements OnModuleInit {
   private pixelToIDOffset = 1000000;
   private cachedDimensions: { width: string; height: string } | null = null;
   private dimensionsFetchPromise: Promise<{ width: string; height: string }> | null = null;
+  private lastProcessedBlock: number | null = null;
 
   constructor(
     @Inject(forwardRef(() => PixelTransferService))
@@ -243,6 +244,37 @@ export class OwnTheDogeContractService implements OnModuleInit {
     // backfill on subscription setup, which exceeds Alchemy free tier limits.
     this.ethersService.provider.on('block', async (blockNumber: number) => {
       try {
+        // Detect and backfill gaps from WS disconnections
+        if (this.lastProcessedBlock !== null && blockNumber > this.lastProcessedBlock + 1) {
+          const gapStart = this.lastProcessedBlock + 1;
+          const gapEnd = blockNumber - 1;
+          this.logger.warn(`Gap detected: blocks ${gapStart} to ${gapEnd} (${gapEnd - gapStart + 1} missed)`);
+          for (let b = gapStart; b <= gapEnd; b++) {
+            try {
+              const gapLogs = await this.pxContract.queryFilter(filter, b, b);
+              for (const event of gapLogs) {
+                const typedEvent = event as ethers.EventLog;
+                const [from, to, tokenId] = typedEvent.args;
+                this.logger.log(`backfill transfer event: (${tokenId}) ${from} -> ${to} [block ${b}]`);
+                const blockCreatedAt =
+                  await this.ethersService.getDateTimeFromBlockNumber(b);
+                const payload: PixelTransferEventPayload = {
+                  from,
+                  to,
+                  tokenId: Number(tokenId),
+                  blockNumber: b,
+                  blockCreatedAt,
+                  event: typedEvent,
+                };
+                this.eventEmitter.emit(Events.PIXEL_TRANSFER, payload);
+              }
+            } catch (gapError) {
+              this.logger.error(`Error backfilling block ${b}: ${gapError.message}`);
+            }
+          }
+        }
+        this.lastProcessedBlock = blockNumber;
+
         const logs = await this.pxContract.queryFilter(filter, blockNumber, blockNumber);
         for (const event of logs) {
           const typedEvent = event as ethers.EventLog;
