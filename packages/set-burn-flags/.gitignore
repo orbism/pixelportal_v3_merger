@@ -1,0 +1,24 @@
+# Database
+priv/store.db
+priv/store.db-journal
+priv/store.db-wal
+priv/store.db-shm
+
+# Environment
+.env.local
+.env.*.local
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Deno
+deno.lock
