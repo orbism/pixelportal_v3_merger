@@ -28,7 +28,6 @@ const UserDropdown = observer(() => {
   useEffect(() => {
     if (address) {
       AppStore.web3.setAddress(address);
-      AppStore.web3.refreshPupperBalance();
     }
   }, [address]);
 
@@ -37,12 +36,6 @@ const UserDropdown = observer(() => {
       AppStore.web3.refreshPupperBalance();
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    if (AppStore.web3.address && AppStore.web3.signer) {
-      AppStore.web3.getDogBalance();
-    }
-  }, [AppStore.web3.address, AppStore.web3.signer]);
 
   return (
     <Box>

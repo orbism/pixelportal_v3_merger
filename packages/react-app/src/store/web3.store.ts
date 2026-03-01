@@ -19,7 +19,7 @@ import { ObjectKeys } from "../helpers/objects";
 import { abbreviate } from "../helpers/strings";
 import KobosuJson from "../images/kobosu.json";
 import { PixelOwnerInfo } from "../pages/Leaderbork/Leaderbork.store";
-import { Http } from "../services";
+import { Http, throttledGet } from "../services";
 import LocalStorage from "../services/local-storage";
 import { Reactionable } from "../services/mixins/reactionable";
 import CowStore from "./cow.store";
@@ -96,16 +96,6 @@ class Web3Store extends Reactionable(Web3providerStore) {
     console.log("Specific Network Contract Data:", deployedContracts[this.targetChainId.toString()]?.[this.targetNetworkName]);
 
     makeObservable(this);
-    reaction(
-      () => this.address,
-      address => {
-        console.log("Address:", address);
-        if (address) {
-          // console.log("Address changed:", address);
-          this.refreshPupperBalance();
-        }
-      },
-    );
 
     // reaction(
     //   () => this.signer,
@@ -248,7 +238,7 @@ class Web3Store extends Reactionable(Web3providerStore) {
   }
 
   async debugContractAddresses() {
-    const res = await Http.get("/v1/contract/addresses");
+    const res = await throttledGet("/v1/contract/addresses");
     const { dog: dogAddress, pixel: pixelAddress } = res.data;
 
     if (dogAddress !== this.dogContractAddress) {
@@ -284,7 +274,7 @@ class Web3Store extends Reactionable(Web3providerStore) {
 
   async getPixelOwnershipMap() {
     try {
-      const { data } = await Http.get("/v1/config");
+      const { data } = await throttledGet("/v1/config");
       this.addressToPuppers = data;
       return data;
     } catch (error) {
@@ -300,7 +290,7 @@ class Web3Store extends Reactionable(Web3providerStore) {
   }
 
   getShibaDimensions() {
-    return Http.get("/v1/px/dimensions").then(({ data }) => {
+    return throttledGet("/v1/px/dimensions").then(({ data }) => {
       this.WIDTH = data.width;
       this.HEIGHT = data.height;
     });
@@ -368,7 +358,7 @@ class Web3Store extends Reactionable(Web3providerStore) {
     if (!this.address) return 0;
 
     try {
-      const res = await Http.get(`/v1/px/balance/${this.address}`);
+      const res = await throttledGet(`/v1/px/balance/${this.address}`);
       console.log('✅ Pupper balance from API:', res.data.balance);
       return res.data.balance;
     } catch (error) {
@@ -402,7 +392,7 @@ class Web3Store extends Reactionable(Web3providerStore) {
 
   async getDogLocked() {
     console.log(`Fetching locked DOG balance from contract address: ${this.dogContractAddress}`);
-    const res = await Http.get("/v1/dog/locked");
+    const res = await throttledGet("/v1/dog/locked");
     return res.data.balance;
   }
 

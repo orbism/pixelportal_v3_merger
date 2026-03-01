@@ -3,10 +3,10 @@
 *************************************************************************************************/
   
 const buildInfo = {
-  "branchName": "orbdev-chainidbs",
-  "lastHash": "b97f5e7ccab62749c012c24f46b231de40a4fbd7",
-  "buildNumber": "#000101",
-  "buildTime": "2026-02-27T15:53:49.033Z"
+  "branchName": "orbdev",
+  "lastHash": "048301ccd98a2ced22040c37e38896bf4856497b",
+  "buildNumber": "#000111",
+  "buildTime": "2026-03-01T19:44:56.983Z"
 }
 export default buildInfo;
   
