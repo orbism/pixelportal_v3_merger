@@ -205,6 +205,7 @@ class Web3Store extends Reactionable(Web3providerStore) {
         this.refreshPupperBalance();
         await this.debugContractAddresses();
         await this.errorGuardContracts();
+        this.validateMyPixelsOnChain(); // fire-and-forget: prune stale/burned pixels
         this.cowStore.connect(this.signer!);
       }
     } catch (e) {
@@ -285,8 +286,32 @@ class Web3Store extends Reactionable(Web3providerStore) {
   refreshPixelOwnershipMap() {
     return Http.get("/v1/config/refresh").then(({ data }) => {
       this.addressToPuppers = data;
+      this.validateMyPixelsOnChain(); // fire-and-forget
       return data;
     });
+  }
+
+  async validateMyPixelsOnChain() {
+    if (!this.address || !this.addressToPuppers || !this.pxContract) return;
+    const myPixels = this.puppersOwned;
+    if (myPixels.length === 0) return;
+
+    const verified = await this.getOwnedEligibleV3Tokens(myPixels, this.address);
+    const stale = myPixels.filter(p => !verified.includes(p));
+
+    if (stale.length > 0) {
+      console.warn(`Stale pixels removed (burned on-chain): ${stale.join(', ')}`);
+      const key = Object.keys(this.addressToPuppers!).find(
+        k => k.toLowerCase() === this.address!.toLowerCase()
+      );
+      if (key) {
+        runInAction(() => {
+          this.addressToPuppers![key].tokenIds = verified;
+        });
+      }
+      // Trigger server refresh in background so future loads are correct
+      Http.get("/v1/config/refresh").catch(() => {});
+    }
   }
 
   getShibaDimensions() {
