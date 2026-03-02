@@ -31,6 +31,9 @@ class ViewerStore extends Eventable(Reactionable(EmptyClass)) {
   tokenOwner: string | null = null;
 
   @observable
+  tokenStatus: 'owned' | 'burned' | 'not_minted' | null = null;
+
+  @observable
   tokenOwnerENS: string | null = null;
 
   @observable
@@ -70,11 +73,9 @@ class ViewerStore extends Eventable(Reactionable(EmptyClass)) {
 
   @action
   async getTokenOwner(tokenId: number) {
-    try {
-      this.tokenOwner = await AppStore.web3.getPxOwnerByTokenId(tokenId);
-    } catch (e) {
-      this.tokenOwner = null;
-    }
+    const result = await AppStore.web3.getPxOwnerByTokenId(tokenId);
+    this.tokenOwner = result.address;
+    this.tokenStatus = result.status;
 
     if (this.tokenOwner) {
       if (this.tokenOwner === AppStore.web3.address) {

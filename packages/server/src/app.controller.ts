@@ -117,12 +117,15 @@ export class AppController {
       Number(params.tokenId),
     );
 
+    const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
     if (!transfer) {
-      throw new BadRequestException('Could not find token');
+      return { address: null, status: 'not_minted' };
     }
-    return {
-      address: transfer.to,
-    };
+    if (transfer.to.toLowerCase() === ZERO_ADDRESS) {
+      return { address: null, status: 'burned' };
+    }
+    return { address: transfer.to, status: 'owned' };
   }
 
   @Get('dog/locked')
