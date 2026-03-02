@@ -4,9 +4,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ServeStaticModule } from '@nestjs/serve-static';
 import { redisStore } from 'cache-manager-redis-yet';
-import { join } from 'path';
 import { AlchemyService } from './alchemy/alchemy.service';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -40,9 +38,6 @@ import { SupportService } from './support/support.service';
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
-    }),
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, 'public'),
     }),
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
