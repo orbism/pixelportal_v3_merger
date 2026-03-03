@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Contract, JsonRpcProvider } from 'ethers';
-import { Cron, CronExpression } from '@nestjs/schedule';
+
 import { Configuration } from '../config/configuration';
 import { LEGACY_PX_ABI } from '../contracts/legacyContracts';
 import * as contractData from '../contracts/abi.json';
@@ -250,17 +250,6 @@ export class BurnVerificationService implements OnModuleInit {
     }
 
     return { results, txHash };
-  }
-
-  @Cron(CronExpression.EVERY_5_MINUTES)
-  async sweepCron() {
-    this.logger.log('Cron: running sweepUnconfirmedBurns');
-    try {
-      const result = await this.sweepUnconfirmedBurns();
-      this.logger.log(`Cron sweep complete: ${result.summary.total} new flags set`);
-    } catch (error) {
-      this.logger.error(`Cron sweep failed: ${error.message}`);
-    }
   }
 
   /**

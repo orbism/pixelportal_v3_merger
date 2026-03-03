@@ -234,68 +234,55 @@ export class OwnTheDogeContractService implements OnModuleInit {
   }
 
   private initPixelListener() {
-    this.logger.log(`initPixelListener`);
-    this.logger.log(`Listening to pixel transfer events via block polling`);
+    this.logger.log('initPixelListener');
+    this.logger.log('Polling for pixel transfer events every 5 minutes');
 
     const filter = this.pxContract.filters.Transfer(null, null);
+    const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-    // Use provider.on('block') instead of contract.on('Transfer') to avoid
-    // ethers v6 WebSocketProvider issuing an unchunked historical eth_getLogs
-    // backfill on subscription setup, which exceeds Alchemy free tier limits.
-    this.ethersService.provider.on('block', async (blockNumber: number) => {
+    const poll = async () => {
       try {
-        // Detect and backfill gaps from WS disconnections
-        if (this.lastProcessedBlock !== null && blockNumber > this.lastProcessedBlock + 1) {
-          const gapStart = this.lastProcessedBlock + 1;
-          const gapEnd = blockNumber - 1;
-          this.logger.warn(`Gap detected: blocks ${gapStart} to ${gapEnd} (${gapEnd - gapStart + 1} missed)`);
-          for (let b = gapStart; b <= gapEnd; b++) {
-            try {
-              const gapLogs = await this.pxContract.queryFilter(filter, b, b);
-              for (const event of gapLogs) {
-                const typedEvent = event as ethers.EventLog;
-                const [from, to, tokenId] = typedEvent.args;
-                this.logger.log(`backfill transfer event: (${tokenId}) ${from} -> ${to} [block ${b}]`);
-                const blockCreatedAt =
-                  await this.ethersService.getDateTimeFromBlockNumber(b);
-                const payload: PixelTransferEventPayload = {
-                  from,
-                  to,
-                  tokenId: Number(tokenId),
-                  blockNumber: b,
-                  blockCreatedAt,
-                  event: typedEvent,
-                };
-                this.eventEmitter.emit(Events.PIXEL_TRANSFER, payload);
-              }
-            } catch (gapError) {
-              this.logger.error(`Error backfilling block ${b}: ${gapError.message}`);
-            }
-          }
-        }
-        this.lastProcessedBlock = blockNumber;
+        const currentBlock = await this.ethersService.provider.getBlockNumber();
 
-        const logs = await this.pxContract.queryFilter(filter, blockNumber, blockNumber);
+        if (this.lastProcessedBlock === null) {
+          // First poll — just record current block, don't backfill
+          this.lastProcessedBlock = currentBlock;
+          this.logger.log(`Transfer poll: initialized at block ${currentBlock}`);
+          return;
+        }
+
+        if (currentBlock <= this.lastProcessedBlock) return;
+
+        const fromBlock = this.lastProcessedBlock + 1;
+        this.logger.log(`Transfer poll: querying blocks ${fromBlock}–${currentBlock}`);
+
+        const logs = await this.pxContract.queryFilter(filter, fromBlock, currentBlock);
         for (const event of logs) {
           const typedEvent = event as ethers.EventLog;
           const [from, to, tokenId] = typedEvent.args;
-          this.logger.log(`new transfer event hit: (${tokenId}) ${from} -> ${to}`);
+          this.logger.log(`transfer event: (${tokenId}) ${from} -> ${to} [block ${typedEvent.blockNumber}]`);
           const blockCreatedAt =
-            await this.ethersService.getDateTimeFromBlockNumber(blockNumber);
+            await this.ethersService.getDateTimeFromBlockNumber(typedEvent.blockNumber);
           const payload: PixelTransferEventPayload = {
             from,
             to,
             tokenId: Number(tokenId),
-            blockNumber,
+            blockNumber: typedEvent.blockNumber,
             blockCreatedAt,
             event: typedEvent,
           };
           this.eventEmitter.emit(Events.PIXEL_TRANSFER, payload);
         }
+
+        this.lastProcessedBlock = currentBlock;
       } catch (error) {
-        this.logger.error(`Error processing block ${blockNumber}: ${error.message}`);
+        this.logger.error(`Transfer poll error: ${error.message}`);
       }
-    });
+    };
+
+    // Run once on startup, then every 5 minutes
+    poll();
+    setInterval(poll, POLL_INTERVAL_MS);
   }
 
   async getAllPixelTransferLogs() {
