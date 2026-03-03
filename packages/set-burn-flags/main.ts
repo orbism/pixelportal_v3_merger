@@ -108,6 +108,18 @@ const v3Client = createPublicClient({
   transport: http(V3_HTTP_RPC_ENDPOINT),
 });
 
+const PRIVATE_KEY = Deno.env.get("PRIVATE_KEY");
+if (!PRIVATE_KEY) {
+  throw new Error("Missing env var: PRIVATE_KEY");
+}
+const v3Account = privateKeyToAccount(PRIVATE_KEY as `0x${string}`);
+const v3WalletClient = createWalletClient({
+  account: v3Account,
+  chain: v3Chain,
+  transport: http(V3_HTTP_RPC_ENDPOINT),
+});
+console.log(`V3 wallet address: ${v3Account.address}`);
+
 const sourceChains: SourceChainConfig[] = [
   {
     label: "V1",
@@ -161,21 +173,16 @@ async function setBurnFlagOnV3(chain: SourceChainConfig, tokenId: bigint): Promi
 
     console.log(`[${label}] Setting burn flag on V3 for token ${tokenId} (reserved for ${reservedFor})`);
 
-    // TODO: Add wallet client with private key for signing transactions
-    // const account = privateKeyToAccount(Deno.env.get("PRIVATE_KEY") as `0x${string}`);
-    // const walletClient = createWalletClient({
-    //   account,
-    //   chain: v3Chain,
-    //   transport: http(V3_HTTP_RPC_ENDPOINT),
-    // });
-    //
-    // const hash = await walletClient.writeContract({
-    //   address: V3_CONTRACT_ADDRESS,
-    //   abi: v3Abi,
-    //   functionName: "setBurnFlags",
-    //   args: [[tokenId], [true]],
-    // });
-    // console.log(`[${label}] Transaction hash: ${hash}`);
+    const hash = await withRateLimitRetry(
+      () => v3WalletClient.writeContract({
+        address: V3_CONTRACT_ADDRESS,
+        abi: v3Abi,
+        functionName: "setBurnFlags",
+        args: [[tokenId], [true]],
+      }),
+      `${label}->V3`
+    );
+    console.log(`[${label}] Burn flag set for token ${tokenId}, tx: ${hash}`);
   } catch (error) {
     console.error(`[${label}] Error setting burn flag for token ${tokenId}:`, error);
   }
