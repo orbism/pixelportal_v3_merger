@@ -220,6 +220,7 @@ function watchBurns(chain: SourceChainConfig): void {
     },
     onError: (error) => {
       console.error(`[${label}] Watch event error:`, error);
+      shutdown();
     },
   });
   unsubscribers.push(unsubscribe);
@@ -248,6 +249,7 @@ function watchBlocks(chain: SourceChainConfig): void {
     },
     onError: (error) => {
       console.error(`[${label}] Watch blocks error:`, error);
+      shutdown();
     },
   });
   unsubscribers.push(unsubscribe);
