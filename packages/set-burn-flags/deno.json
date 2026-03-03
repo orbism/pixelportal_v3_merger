@@ -6,7 +6,8 @@
   },
   "imports": {
     "viem": "npm:viem@^2",
-    "viem/": "npm:viem@^2/",
+    "viem/chains": "npm:viem@^2/chains",
+    "viem/accounts": "npm:viem@^2/accounts",
     "@db/sqlite": "jsr:@db/sqlite@0.12"
   }
 }
