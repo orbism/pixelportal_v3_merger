@@ -56,9 +56,9 @@ const V1_WS_RPC_ENDPOINT = Deno.env.get("V1_WS_RPC_ENDPOINT")!;
 const V2_WS_RPC_ENDPOINT = Deno.env.get("V2_WS_RPC_ENDPOINT")!;
 const V3_HTTP_RPC_ENDPOINT = Deno.env.get("V3_HTTP_RPC_ENDPOINT")!;
 
-// Deploy block numbers from env
-const V1_DEPLOY_BLOCK = BigInt(Deno.env.get("V1_DEPLOY_BLOCK") || "0");
-const V2_DEPLOY_BLOCK = BigInt(Deno.env.get("V2_DEPLOY_BLOCK") || "0");
+// Snapshot block numbers from env (start scanning from these blocks)
+const V1_SNAPSHOT_BLOCK = BigInt(Deno.env.get("V1_SNAPSHOT_BLOCK") || "0");
+const V2_SNAPSHOT_BLOCK = BigInt(Deno.env.get("V2_SNAPSHOT_BLOCK") || "0");
 
 // Batch size for historical block processing
 const BLOCK_BATCH_SIZE = BigInt(Deno.env.get("BLOCK_BATCH_SIZE") || "1000");
@@ -380,10 +380,10 @@ async function syncV1Historical(targetBlock: bigint): Promise<void> {
     // Persist the backfill target so live watcher knows the boundary
     setStoredBlock(V1_BACKFILL_TARGET_KEY, targetBlock);
 
-    let fromBlock = getStoredBlock(V1_LAST_PROCESSED_KEY, V1_DEPLOY_BLOCK);
+    let fromBlock = getStoredBlock(V1_LAST_PROCESSED_KEY, V1_SNAPSHOT_BLOCK);
 
     // Start from next block if we've already processed some
-    if (fromBlock >= V1_DEPLOY_BLOCK && fromBlock < targetBlock) {
+    if (fromBlock >= V1_SNAPSHOT_BLOCK && fromBlock < targetBlock) {
       fromBlock = fromBlock + 1n;
     }
 
@@ -420,10 +420,10 @@ async function syncV2Historical(targetBlock: bigint): Promise<void> {
     // Persist the backfill target so live watcher knows the boundary
     setStoredBlock(V2_BACKFILL_TARGET_KEY, targetBlock);
 
-    let fromBlock = getStoredBlock(V2_LAST_PROCESSED_KEY, V2_DEPLOY_BLOCK);
+    let fromBlock = getStoredBlock(V2_LAST_PROCESSED_KEY, V2_SNAPSHOT_BLOCK);
 
     // Start from next block if we've already processed some
-    if (fromBlock >= V2_DEPLOY_BLOCK && fromBlock < targetBlock) {
+    if (fromBlock >= V2_SNAPSHOT_BLOCK && fromBlock < targetBlock) {
       fromBlock = fromBlock + 1n;
     }
 
