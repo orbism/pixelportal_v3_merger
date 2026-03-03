@@ -4,7 +4,7 @@ import { observer } from "mobx-react-lite";
 import { useState, useEffect } from "react";
 import { IoReload } from "react-icons/io5";
 import { generatePath, useHistory, useLocation } from "react-router-dom";
-import { useAccount, useDisconnect, useBlockNumber } from "wagmi";
+import { useAccount, useDisconnect } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import Dev from "../common/Dev";
 import Link from "../DSL/Link/Link";

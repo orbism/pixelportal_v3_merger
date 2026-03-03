@@ -99,8 +99,8 @@ const config = createConfig({
   connectors,
   chains: [targetChain as Chain, ...l1Chains],
   transports: {
-    [targetChain.id]: http(),
-    ...Object.fromEntries(l1Chains.map(c => [c.id, http()])),
+    [targetChain.id]: http(envConfig.chain.rpcUrl, { pollingInterval: 3_600_000 }),
+    ...Object.fromEntries(l1Chains.map(c => [c.id, http(undefined, { pollingInterval: 3_600_000 })])),
   },
 });
 

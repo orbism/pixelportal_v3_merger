@@ -72,7 +72,7 @@ const SelectedPixelPane = observer(function SelectedPixelPane({ store }: { store
             </Dev>
           )}
 
-          {store.tokenOwner && (
+          {store.tokenOwner ? (
             <Box mt={4}>
               <Typography variant={TVariant.ComicSans14} mr={2}>
                 Owned by
@@ -97,6 +97,12 @@ const SelectedPixelPane = observer(function SelectedPixelPane({ store }: { store
                   </Link>
                 </Box>
               </Flex>
+            </Box>
+          ) : store.tokenStatus && (
+            <Box mt={4}>
+              <Typography variant={TVariant.ComicSans14}>
+                {store.tokenStatus === 'not_minted' ? 'Not yet minted' : 'Burned'}
+              </Typography>
             </Box>
           )}
         </Box>

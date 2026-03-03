@@ -391,7 +391,7 @@ class Web3Store extends Reactionable(Web3providerStore) {
 
   async getPxOwnerByTokenId(tokenId: number) {
     const res = await Http.get(`/v1/px/owner/${tokenId}`);
-    return res.data.address;
+    return res.data;
   }
 
   async approvePxSpendDog(amount: BigNumber) {
