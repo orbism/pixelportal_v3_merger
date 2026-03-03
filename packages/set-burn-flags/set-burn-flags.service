@@ -18,7 +18,7 @@ ProtectSystem=strict
 PrivateDevices=true
 NoNewPrivileges=true
 CapabilityBoundingSet=~CAP_SYS_ADMIN
-ReadWritePaths=/var/lib/portal-burn/.cache/deno
+ReadWritePaths=/var/lib/portal-burn/.cache/deno /opt/portal-burn/vcs/int/pixel-portal-v3/packages/set-burn-flags/priv
 
 [Install]
 WantedBy=multi-user.target
