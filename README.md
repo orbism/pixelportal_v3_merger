@@ -204,6 +204,12 @@ GET  /v1/ens/:address              # Resolve Basename for address
 GET  /v1/px/metadata/:tokenId      # Get pixel metadata
 GET  /v1/contract/addresses        # Get deployed contract addresses
 POST /v1/support                   # Submit support ticket
+
+# Migration / Claims
+GET  /v1/migration/eligible/:address # Get claimable pixels for address
+GET  /v1/migration/stats             # Snapshot statistics
+POST /v1/migration/verify-burns      # Verify burns on-demand (frontend)
+POST /v1/migration/verify-burns/sweep # Sweep all unconfirmed (X-Cron-Secret)
 ```
 
 ### Database Schema
@@ -218,13 +224,14 @@ POST /v1/support                   # Submit support ticket
 ### Architecture Notes
 
 **Event Processing Flow:**
-1. WebSocket connection to Base RPC
-2. Listen for PX contract Transfer events
-3. Parse event → emit internal event
-4. PixelTransferService handles event
+1. WebSocket connection to Base RPC (used for contract calls)
+2. Poll for PX contract Transfer events every 5 minutes
+3. Parse events → emit internal events
+4. PixelTransferService handles each event
 5. Upsert to Postgres via Prisma
-6. Cache ENS/Basename lookups in Redis
-7. Serve aggregated data via REST API
+6. Frontend calls `GET /v1/config/refresh` after user actions for immediate sync
+7. Cache Basename lookups in Redis
+8. Serve aggregated data via REST API
 
 **Name Resolution:**
 - ENS lookup disabled (Ethereum L1)
@@ -548,6 +555,9 @@ heroku logs --tail
 - `AWS_*`: S3 configuration for image storage
 - `SENTRY_DNS`: Error tracking
 - `DRIP_KEY`: Private key for freemoney/faucet feature (leave blank to disable)
+- `BURN_VERIFICATION_KEY`: Private key for admin wallet that sets burn flags on V3 contract
+- `INFURA_KEY`: Infura API key for V1/V2 burn verification (Ethereum + Base)
+- `CRON_SECRET`: Protects the `POST /v1/migration/verify-burns/sweep` endpoint
 
 **Frontend:**
 - `REACT_APP_SENTRY_DSN`: Error tracking
