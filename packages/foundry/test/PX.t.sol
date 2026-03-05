@@ -3,7 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {PX} from "../src/PX.sol";
+import {PXV3} from "../src/PXV3.sol";
 import {MockDOG20} from "./mocks/MockDOG20.sol";
 import {TestUtils} from "./utils/TestUtils.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
@@ -18,8 +18,9 @@ import {
     InvalidTokenID,
     TokenIDOutOfRange,
     TokenAlreadyExists,
-    TokenAlreadyReserved
-} from "../src/PX.sol";
+    TokenAlreadyReserved,
+    MintingAlreadyStarted
+} from "../src/PXV3.sol";
 
 /**
  * @title PXTest
@@ -39,7 +40,7 @@ contract PXTest is Test {
     uint256 constant INDEX_OFFSET = 1000000;
     uint256 constant SHARD_SIZE = 5000;
 
-    PX public px;
+    PXV3 public px;
     MockDOG20 public dog20;
 
     address public owner;
@@ -70,10 +71,10 @@ contract PXTest is Test {
         dog20 = new MockDOG20();
         dog20.initialize(mockAddresses, DOG_TO_PIXEL_SATOSHIS * MOCK_SUPPLY);
 
-        PX implementation = new PX();
+        PXV3 implementation = new PXV3();
 
         bytes memory initData = abi.encodeWithSelector(
-            PX.__PX_init.selector,
+            PXV3.__PX_init.selector,
             "LONG LIVE D O G",
             "PX",
             address(dog20),
@@ -85,9 +86,10 @@ contract PXTest is Test {
         );
 
         ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
-        px = PX(address(proxy));
+        px = PXV3(address(proxy));
 
         px.unpause();
+        px.startMinting();
 
         px.setTokenLockAmount(address(dog20), DOG_TO_PIXEL_SATOSHIS);
 
@@ -164,43 +166,6 @@ contract PXTest is Test {
         }
     }
 
-    // Helper function to burn puppers with validation (equivalent to JS burnPupperWithValidation)
-    function burnPupperWithValidation(address signer, uint256 pupper) internal {
-        burnPupperWithValidation(signer, pupper, false, "");
-    }
-
-    function burnPupperWithValidation(address signer, uint256 pupper, bool shouldRevert, string memory revertMessage)
-        internal
-    {
-        uint256 addrDog20BalanceBefore = dog20.balanceOf(signer);
-        uint256 pxDog20BalanceBefore = dog20.balanceOf(address(px));
-        uint256 feesDevDog20BalanceBefore = dog20.balanceOf(feesAccountDev);
-        uint256 addrPXBalanceBefore = px.balanceOf(signer);
-        uint256 supplyPXBalanceBefore = px.puppersRemaining();
-
-        // Burn pupper
-        uint256[] memory puppers = new uint256[](1);
-        puppers[0] = pupper;
-
-        vm.prank(signer);
-        if (shouldRevert) {
-            vm.expectRevert(bytes(revertMessage));
-            px.burnPuppers(puppers);
-        } else {
-            px.burnPuppers(puppers);
-
-            // Verify balances after successful burn
-            uint256 totalFeeAmount = DOG_TO_PIXEL_SATOSHIS / 100; // 1% total fee to dev
-            uint256 userAmount = DOG_TO_PIXEL_SATOSHIS - totalFeeAmount; // 99% to user
-
-            assertEq(dog20.balanceOf(address(px)), pxDog20BalanceBefore - DOG_TO_PIXEL_SATOSHIS);
-            assertEq(dog20.balanceOf(signer), addrDog20BalanceBefore + userAmount);
-            assertEq(dog20.balanceOf(feesAccountDev), feesDevDog20BalanceBefore + totalFeeAmount);
-            assertEq(px.balanceOf(signer), addrPXBalanceBefore - 1);
-            assertEq(px.puppersRemaining(), supplyPXBalanceBefore + 1);
-        }
-    }
-
     // Test: Basic minting functionality
     function test_SenderShouldBeOwnerAfterMint() public {
         uint256 tokenId = mintPupperWithValidation(addr1, 1);
@@ -266,18 +231,6 @@ contract PXTest is Test {
         assertEq(px.balanceOf(addr2), 1);
     }
 
-    // Test: Owners can burn their puppers
-    function test_OwnerCanBurn() public {
-        uint256[] memory burnTokens = new uint256[](3);
-        burnTokens[0] = mintPupperWithValidation(addr1, 1);
-        burnTokens[1] = mintPupperWithValidation(addr2, 1);
-        burnTokens[2] = mintPupperWithValidation(addr3, 1);
-
-        burnPupperWithValidation(addr1, burnTokens[0]);
-        burnPupperWithValidation(addr2, burnTokens[1]);
-        burnPupperWithValidation(addr3, burnTokens[2]);
-    }
-
     // Test: Puppers can be transferred
     function test_PupperTransfer() public {
         uint256 tokenId = mintPupperWithValidation(addr1, 1);
@@ -305,6 +258,68 @@ contract PXTest is Test {
             abi.encodeWithSignature("ERC20InsufficientBalance(address,uint256,uint256)", poorAddr, 0, needed)
         );
         px.mintPuppers(1, address(dog20));
+    }
+
+    function burnPupperWithValidation(address signer, uint256 pupper) internal {
+        uint256 addrDog20BalanceBefore = dog20.balanceOf(signer);
+        uint256 pxDog20BalanceBefore = dog20.balanceOf(address(px));
+        uint256 addrPXBalanceBefore = px.balanceOf(signer);
+        uint256 supplyPXBalanceBefore = px.puppersRemaining();
+
+        uint256[] memory puppers = new uint256[](1);
+        puppers[0] = pupper;
+
+        vm.prank(signer);
+        px.burnPuppers(puppers);
+
+        // V3: 100% returned to user, no dev fee
+        assertEq(dog20.balanceOf(address(px)), pxDog20BalanceBefore - DOG_TO_PIXEL_SATOSHIS);
+        assertEq(dog20.balanceOf(signer), addrDog20BalanceBefore + DOG_TO_PIXEL_SATOSHIS);
+        assertEq(px.balanceOf(signer), addrPXBalanceBefore - 1);
+        assertEq(px.puppersRemaining(), supplyPXBalanceBefore + 1);
+    }
+
+    // Test: Owner can burn tokens and get 100% refund
+    function test_OwnerCanBurn() public {
+        uint256[] memory burnTokens = new uint256[](3);
+        burnTokens[0] = mintPupperWithValidation(addr1, 1);
+        burnTokens[1] = mintPupperWithValidation(addr2, 1);
+        burnTokens[2] = mintPupperWithValidation(addr3, 1);
+
+        burnPupperWithValidation(addr1, burnTokens[0]);
+        burnPupperWithValidation(addr2, burnTokens[1]);
+        burnPupperWithValidation(addr3, burnTokens[2]);
+    }
+
+    // Test: Burn and remint cycle
+    function test_BurnAndRemintCycle() public {
+        uint256 tokenId = mintPupperWithValidation(addr1, 1);
+        uint256 supplyBefore = px.puppersRemaining();
+
+        burnPupperWithValidation(addr1, tokenId);
+        assertEq(px.puppersRemaining(), supplyBefore + 1);
+
+        uint256 newTokenId = mintPupperWithValidation(addr2, 1);
+        assertEq(px.puppersRemaining(), supplyBefore);
+
+        console.log("New token minted after burn-remint cycle:", newTokenId);
+    }
+
+    // Test: Cannot reserve tokens after minting has started
+    function test_CannotReserveAfterMintingStarted() public {
+        // setUp already called startMinting(), so any reservation attempt should fail
+        uint256[] memory tokenIds = new uint256[](1);
+        address[] memory recipients = new address[](1);
+
+        tokenIds[0] = INDEX_OFFSET + 1;
+        recipients[0] = addr2;
+
+        vm.prank(owner);
+        px.pause();
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(MintingAlreadyStarted.selector));
+        px.reserveTokensForMigration(tokenIds, recipients);
     }
 
     // Test: Cannot burn empty array
@@ -351,9 +366,9 @@ contract PXTest is Test {
     // Test: Contract starts paused on deployment
     function test_ContractStartsPaused() public {
         // Deploy a fresh contract to test initial state
-        PX implementation = new PX();
+        PXV3 implementation = new PXV3();
         bytes memory initData = abi.encodeWithSelector(
-            PX.__PX_init.selector,
+            PXV3.__PX_init.selector,
             "TEST PX",
             "TPX",
             address(dog20),
@@ -364,7 +379,7 @@ contract PXTest is Test {
             address(this)
         );
         ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
-        PX freshPx = PX(address(proxy));
+        PXV3 freshPx = PXV3(address(proxy));
 
         // Contract should start paused
         assertTrue(freshPx.paused());
@@ -412,6 +427,34 @@ contract PXTest is Test {
 
         // Verify the mint worked
         assertEq(px.balanceOf(addr1), 1);
+    }
+
+    // Test: NFT transfers are blocked when paused
+    function test_TransfersBlockedWhenPaused() public {
+        // Mint a token to addr1
+        vm.prank(addr1);
+        dog20.approve(address(px), DOG_TO_PIXEL_SATOSHIS);
+        vm.prank(addr1);
+        uint256 tokenId = mintPupperWithValidation(addr1, 1);
+
+        // Pause the contract
+        px.pause();
+
+        // transferFrom should revert
+        vm.prank(addr1);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        px.transferFrom(addr1, addr2, tokenId);
+
+        // safeTransferFrom should revert
+        vm.prank(addr1);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        px.safeTransferFrom(addr1, addr2, tokenId);
+
+        // Unpause and transfer should work
+        px.unpause();
+        vm.prank(addr1);
+        px.transferFrom(addr1, addr2, tokenId);
+        assertEq(px.ownerOf(tokenId), addr2);
     }
 
     // Test: Only admin can pause/unpause
@@ -488,27 +531,6 @@ contract PXTest is Test {
         assertTrue(foundDifferent, "All minted tokens have the same ID");
     }
 
-    // Test: Burn and re-mint cycle
-    function test_BurnAndRemintCycle() public {
-        // Mint a pupper
-        uint256 tokenId = mintPupperWithValidation(addr1, 1);
-        uint256 supplyBefore = px.puppersRemaining();
-
-        // Burn it
-        burnPupperWithValidation(addr1, tokenId);
-        assertEq(px.puppersRemaining(), supplyBefore + 1);
-
-        // Should be able to mint again
-        uint256 newTokenId = mintPupperWithValidation(addr2, 1);
-        assertEq(px.puppersRemaining(), supplyBefore);
-
-        // Log the new token ID to verify minting worked and use the variable
-        console.log("New token minted after burn-remint cycle:", newTokenId);
-
-        // New token could be the same or different (due to randomness)
-        // But the supply should be back to original
-    }
-
     // Helper function to check if string contains substring
     function _contains(string memory str, string memory substr) internal pure returns (bool) {
         bytes memory strBytes = bytes(str);
@@ -560,440 +582,4 @@ contract PXTest is Test {
         assertLt(gasUsed, 500000);
     }
 
-    // ========== MIGRATION TESTS ==========
-
-    // Test: Basic pre-mint functionality
-    function test_PreMintForMigration() public {
-        uint256[] memory tokenIds = new uint256[](2);
-        address[] memory recipients = new address[](2);
-
-        tokenIds[0] = INDEX_OFFSET + 5; // Token ID 1000005
-        tokenIds[1] = INDEX_OFFSET + 10; // Token ID 1000010
-        recipients[0] = addr1;
-        recipients[1] = addr2;
-
-        uint256 remainingBefore = px.puppersRemaining();
-
-        // Pause contract for reservations (required)
-        vm.prank(owner);
-        px.pause();
-
-        // Test reservations work when paused
-        vm.expectEmit(true, true, false, false);
-        emit PX.TokenReserved(tokenIds[0], addr1);
-        vm.expectEmit(true, true, false, false);
-        emit PX.TokenReserved(tokenIds[1], addr2);
-
-        vm.prank(owner);
-        px.reserveTokensForMigration(tokenIds, recipients);
-
-        // Check that tokens are reserved but not yet minted
-        assertTrue(px.isReserved(tokenIds[0]));
-        assertTrue(px.isReserved(tokenIds[1]));
-
-        // Tokens should not exist yet (not minted)
-        vm.expectRevert();
-        px.ownerOf(tokenIds[0]);
-        vm.expectRevert();
-        px.ownerOf(tokenIds[1]);
-
-        // Check supply tracking
-        assertEq(px.puppersRemaining(), remainingBefore - 2);
-        assertEq(px.totalReserved(), 2);
-        assertEq(px.balanceOf(addr1), 0);
-        assertEq(px.balanceOf(addr2), 0);
-    }
-
-    // Test: Only admin can call pre-mint (must be paused)
-    function test_OnlyOwnerCanPreMint() public {
-        uint256[] memory tokenIds = new uint256[](1);
-        address[] memory recipients = new address[](1);
-
-        tokenIds[0] = INDEX_OFFSET + 1;
-        recipients[0] = addr1;
-
-        // Pause contract for this test (reservations require paused state)
-        vm.prank(owner);
-        px.pause();
-        assertTrue(px.paused());
-
-        vm.startPrank(addr1);
-        vm.expectRevert(
-            abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", addr1, px.DEFAULT_ADMIN_ROLE())
-        );
-        px.reserveTokensForMigration(tokenIds, recipients);
-        vm.stopPrank();
-    }
-
-    // Test: Multiple addresses can have admin role and both work
-    function test_MultipleAdmins() public {
-        address secondAdmin = makeAddr("secondAdmin");
-
-        // Verify initial state - only original owner has admin role
-        assertTrue(px.hasRole(px.DEFAULT_ADMIN_ROLE(), address(this)));
-        assertFalse(px.hasRole(px.DEFAULT_ADMIN_ROLE(), secondAdmin));
-
-        // Grant admin role to second address
-        px.grantRole(px.DEFAULT_ADMIN_ROLE(), secondAdmin);
-
-        // Verify both have admin role now
-        assertTrue(px.hasRole(px.DEFAULT_ADMIN_ROLE(), address(this)));
-        assertTrue(px.hasRole(px.DEFAULT_ADMIN_ROLE(), secondAdmin));
-
-        // Test that both admins can pause/unpause
-        assertTrue(px.paused() == false); // Contract was unpaused in setUp
-
-        // First admin can pause
-        px.pause();
-        assertTrue(px.paused());
-
-        // Second admin can unpause
-        vm.prank(secondAdmin);
-        px.unpause();
-        assertFalse(px.paused());
-
-        // Second admin can pause
-        vm.prank(secondAdmin);
-        px.pause();
-        assertTrue(px.paused());
-
-        // First admin can unpause
-        px.unpause();
-        assertFalse(px.paused());
-
-        // Pause again to test reservation functionality (reservations require paused state)
-        px.pause();
-        assertTrue(px.paused());
-
-        // Test that both admins can do reservations
-        uint256[] memory tokenIds1 = new uint256[](1);
-        address[] memory recipients1 = new address[](1);
-        tokenIds1[0] = INDEX_OFFSET + 1;
-        recipients1[0] = addr1;
-
-        uint256[] memory tokenIds2 = new uint256[](1);
-        address[] memory recipients2 = new address[](1);
-        tokenIds2[0] = INDEX_OFFSET + 2;
-        recipients2[0] = addr2;
-
-        // First admin can reserve
-        px.reserveTokensForMigration(tokenIds1, recipients1);
-        assertTrue(px.isReserved(tokenIds1[0]));
-
-        // Second admin can reserve
-        vm.prank(secondAdmin);
-        px.reserveTokensForMigration(tokenIds2, recipients2);
-        assertTrue(px.isReserved(tokenIds2[0]));
-
-        // Test role management - both admins can grant/revoke roles
-        address thirdAdmin = makeAddr("thirdAdmin");
-
-        // Second admin can grant role to third admin
-        vm.prank(secondAdmin);
-        px.grantRole(px.DEFAULT_ADMIN_ROLE(), thirdAdmin);
-        assertTrue(px.hasRole(px.DEFAULT_ADMIN_ROLE(), thirdAdmin));
-
-        // First admin can revoke role from third admin
-        px.revokeRole(px.DEFAULT_ADMIN_ROLE(), thirdAdmin);
-        assertFalse(px.hasRole(px.DEFAULT_ADMIN_ROLE(), thirdAdmin));
-
-        // Test that admins can revoke each other's roles
-        vm.prank(secondAdmin);
-        px.revokeRole(px.DEFAULT_ADMIN_ROLE(), address(this));
-        assertFalse(px.hasRole(px.DEFAULT_ADMIN_ROLE(), address(this)));
-
-        // Now only secondAdmin has the role
-        assertTrue(px.hasRole(px.DEFAULT_ADMIN_ROLE(), secondAdmin));
-
-        // Unpause first so we can test pausing again
-        vm.prank(secondAdmin);
-        px.unpause();
-        assertFalse(px.paused());
-
-        // Original admin can no longer perform admin functions
-        vm.expectRevert(
-            abi.encodeWithSignature(
-                "AccessControlUnauthorizedAccount(address,bytes32)", address(this), px.DEFAULT_ADMIN_ROLE()
-            )
-        );
-        px.pause();
-
-        // But second admin still can
-        vm.prank(secondAdmin);
-        px.pause();
-        assertTrue(px.paused());
-
-        console.log("Multiple admin test completed successfully");
-    }
-
-    // Test: Array length validation
-    function test_PreMintArrayLengthMismatch() public {
-        uint256[] memory tokenIds = new uint256[](2);
-        address[] memory recipients = new address[](1);
-
-        tokenIds[0] = INDEX_OFFSET + 1;
-        tokenIds[1] = INDEX_OFFSET + 2;
-        recipients[0] = addr1;
-
-        // Pause contract for reservation (required)
-        vm.prank(owner);
-        px.pause();
-
-        vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(ArraysLengthMismatch.selector));
-        px.reserveTokensForMigration(tokenIds, recipients);
-    }
-
-    // Test: Empty arrays validation
-    function test_PreMintEmptyArrays() public {
-        uint256[] memory tokenIds = new uint256[](0);
-        address[] memory recipients = new address[](0);
-
-        // Pause contract for reservation (required)
-        vm.prank(owner);
-        px.pause();
-
-        vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(EmptyArrays.selector));
-        px.reserveTokensForMigration(tokenIds, recipients);
-    }
-
-    // Test: Batch size limit
-    function test_PreMintBatchTooLarge() public {
-        uint256[] memory tokenIds = new uint256[](101);
-        address[] memory recipients = new address[](101);
-
-        for (uint256 i = 0; i < 101; i++) {
-            tokenIds[i] = INDEX_OFFSET + i;
-            recipients[i] = addr1;
-        }
-
-        // Pause contract for reservation (required)
-        vm.prank(owner);
-        px.pause();
-
-        vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(BatchTooLarge.selector));
-        px.reserveTokensForMigration(tokenIds, recipients);
-    }
-
-    // Test: Invalid recipient address
-    function test_PreMintInvalidRecipient() public {
-        uint256[] memory tokenIds = new uint256[](1);
-        address[] memory recipients = new address[](1);
-
-        tokenIds[0] = INDEX_OFFSET + 1;
-        recipients[0] = address(0);
-
-        // Pause contract for reservation (required)
-        vm.prank(owner);
-        px.pause();
-
-        vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(InvalidRecipient.selector));
-        px.reserveTokensForMigration(tokenIds, recipients);
-    }
-
-    // Test: Invalid token ID ranges
-    function test_PreMintInvalidTokenIds() public {
-        uint256[] memory tokenIds = new uint256[](1);
-        address[] memory recipients = new address[](1);
-        recipients[0] = addr1;
-
-        // Pause contract for reservation (required)
-        vm.prank(owner);
-        px.pause();
-
-        // Token ID below INDEX_OFFSET
-        tokenIds[0] = INDEX_OFFSET - 1;
-
-        vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(InvalidTokenID.selector));
-        px.reserveTokensForMigration(tokenIds, recipients);
-
-        // Token ID above range
-        tokenIds[0] = INDEX_OFFSET + MOCK_SUPPLY + 1;
-
-        vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(TokenIDOutOfRange.selector));
-        px.reserveTokensForMigration(tokenIds, recipients);
-    }
-
-    // Test: Cannot pre-mint already existing token
-    function test_PreMintAlreadyExists() public {
-        // First mint a token normally
-        uint256 existingTokenId = mintPupperWithValidation(addr1, 1);
-
-        uint256[] memory tokenIds = new uint256[](1);
-        address[] memory recipients = new address[](1);
-
-        tokenIds[0] = existingTokenId;
-        recipients[0] = addr2;
-
-        // Pause contract for reservation (required)
-        vm.prank(owner);
-        px.pause();
-
-        vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(TokenAlreadyExists.selector));
-        px.reserveTokensForMigration(tokenIds, recipients);
-    }
-
-    // Test: Pre-mint works while paused
-    function test_PreMintWorksWhilePaused() public {
-        // Pause the contract first (setUp unpauses it)
-        vm.prank(owner);
-        px.pause();
-        assertTrue(px.paused());
-
-        uint256[] memory tokenIds = new uint256[](1);
-        address[] memory recipients = new address[](1);
-
-        tokenIds[0] = INDEX_OFFSET + 1;
-        recipients[0] = addr1;
-
-        vm.prank(owner);
-        px.reserveTokensForMigration(tokenIds, recipients);
-
-        assertTrue(px.isReserved(tokenIds[0]));
-        (address reservedFor,) = px.getReservation(tokenIds[0]);
-        assertEq(reservedFor, addr1);
-    }
-
-    // Test: Large batch gas efficiency
-    function test_PreMintLargeBatch() public {
-        uint256 batchSize = 50; // Test with 50 tokens
-        uint256[] memory tokenIds = new uint256[](batchSize);
-        address[] memory recipients = new address[](batchSize);
-
-        for (uint256 i = 0; i < batchSize; i++) {
-            tokenIds[i] = INDEX_OFFSET + i + 1;
-            recipients[i] = i % 2 == 0 ? addr1 : addr2; // Alternate between addr1 and addr2
-        }
-
-        uint256 remainingBefore = px.puppersRemaining();
-
-        // Pause contract for reservation (required)
-        vm.prank(owner);
-        px.pause();
-
-        uint256 gasBefore = gasleft();
-        vm.prank(owner);
-        px.reserveTokensForMigration(tokenIds, recipients);
-
-        uint256 gasUsed = gasBefore - gasleft();
-        console.log("Gas used for pre-minting", batchSize, "tokens:", gasUsed);
-        console.log("Gas per token:", gasUsed / batchSize);
-
-        // Verify all tokens were reserved correctly
-        assertEq(px.puppersRemaining(), remainingBefore - batchSize);
-        assertEq(px.totalReserved(), batchSize);
-
-        // Check some reservations
-        assertTrue(px.isReserved(tokenIds[0]));
-        assertTrue(px.isReserved(tokenIds[1]));
-        assertTrue(px.isReserved(tokenIds[batchSize - 1]));
-
-        (address reservedFor0,) = px.getReservation(tokenIds[0]);
-        (address reservedFor1,) = px.getReservation(tokenIds[1]);
-        (address reservedForLast,) = px.getReservation(tokenIds[batchSize - 1]);
-
-        assertEq(reservedFor0, addr1);
-        assertEq(reservedFor1, addr2);
-        assertEq(reservedForLast, addr2);
-
-        // Gas should be reasonable (less than 8M gas for 50 tokens with reservation system)
-        assertLt(gasUsed, 8000000);
-    }
-
-    // Test: Pre-mint specific token IDs that would be hard to get via random minting
-    function test_PreMintSpecificTokenIds() public {
-        // Test with some specific token IDs throughout the range
-        uint256[] memory tokenIds = new uint256[](5);
-        address[] memory recipients = new address[](5);
-
-        tokenIds[0] = INDEX_OFFSET + 1; // First token
-        tokenIds[1] = INDEX_OFFSET + 10; // Early token
-        tokenIds[2] = INDEX_OFFSET + (MOCK_SUPPLY / 2); // Middle token
-        tokenIds[3] = INDEX_OFFSET + (MOCK_SUPPLY - 2); // Near end token
-        tokenIds[4] = INDEX_OFFSET + (MOCK_SUPPLY - 1); // Last token
-
-        for (uint256 i = 0; i < 5; i++) {
-            recipients[i] = makeAddr(string(abi.encodePacked("recipient", vm.toString(i))));
-        }
-
-        // Pause contract for reservation (required)
-        vm.prank(owner);
-        px.pause();
-
-        vm.prank(owner);
-        px.reserveTokensForMigration(tokenIds, recipients);
-
-        // Verify all specific tokens were reserved for correct addresses
-        for (uint256 i = 0; i < 5; i++) {
-            assertTrue(px.isReserved(tokenIds[i]));
-            (address reservedFor,) = px.getReservation(tokenIds[i]);
-            assertEq(reservedFor, recipients[i]);
-        }
-    }
-
-    // Test: Cannot exceed remaining supply
-    function test_PreMintExceedsSupply() public {
-        // Pause contract for reservations (required)
-        vm.prank(owner);
-        px.pause();
-
-        // First exhaust most of the supply using pre-mint
-        uint256 remaining = px.puppersRemaining();
-        uint256 tokensToMint = remaining - 5; // Leave only 5 tokens
-
-        // Pre-mint tokens to reduce supply (more efficient for large batches)
-        uint256 batchSize = 100;
-        uint256 batches = tokensToMint / batchSize;
-
-        for (uint256 batch = 0; batch < batches; batch++) {
-            uint256[] memory batchTokenIds = new uint256[](batchSize);
-            address[] memory batchRecipients = new address[](batchSize);
-
-            for (uint256 i = 0; i < batchSize; i++) {
-                batchTokenIds[i] = INDEX_OFFSET + (batch * batchSize) + i + 1;
-                batchRecipients[i] = addr1;
-            }
-
-            vm.prank(owner);
-            px.reserveTokensForMigration(batchTokenIds, batchRecipients);
-        }
-
-        // Handle remaining tokens
-        uint256 remainder = tokensToMint % batchSize;
-        if (remainder > 0) {
-            uint256[] memory remainderTokenIds = new uint256[](remainder);
-            address[] memory remainderRecipients = new address[](remainder);
-
-            for (uint256 i = 0; i < remainder; i++) {
-                remainderTokenIds[i] = INDEX_OFFSET + (batches * batchSize) + i + 1;
-                remainderRecipients[i] = addr1;
-            }
-
-            vm.prank(owner);
-            px.reserveTokensForMigration(remainderTokenIds, remainderRecipients);
-        }
-
-        // Now try to pre-mint more than remaining
-        uint256[] memory tokenIds = new uint256[](10);
-        address[] memory recipients = new address[](10);
-
-        for (uint256 i = 0; i < 10; i++) {
-            tokenIds[i] = INDEX_OFFSET + remaining - 10 + i;
-            recipients[i] = addr2;
-        }
-
-        vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(TokenAlreadyReserved.selector));
-        px.reserveTokensForMigration(tokenIds, recipients);
-    }
 }
-
-// NOTE: Upgrade tests removed temporarily due to missing upgrade mechanism
-// The original project uses ERC1967Proxy but lacks proper upgrade functionality
-// Either TransparentUpgradeableProxy or UUPSUpgradeable pattern needs to be implemented

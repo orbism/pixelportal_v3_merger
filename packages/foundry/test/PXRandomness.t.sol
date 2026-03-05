@@ -3,7 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {PX} from "../src/PX.sol";
+import {PXV3} from "../src/PXV3.sol";
 import {MockDOG20} from "./mocks/MockDOG20.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
@@ -21,7 +21,7 @@ contract PXRandomnessTest is Test {
     string constant MOCK_URI = "ipfs://dog-repo/";
     uint256 constant DOG_TO_PIXEL_SATOSHIS = 1000 * 10 ** 18;
 
-    PX public px;
+    PXV3 public px;
     MockDOG20 public dog20;
     address public owner;
     address public minter;
@@ -39,10 +39,10 @@ contract PXRandomnessTest is Test {
         dog20 = new MockDOG20();
         dog20.initialize(mockAddresses, DOG_TO_PIXEL_SATOSHIS * 100);
 
-        PX implementation = new PX();
+        PXV3 implementation = new PXV3();
 
         bytes memory initData = abi.encodeWithSelector(
-            PX.__PX_init.selector,
+            PXV3.__PX_init.selector,
             "LONG LIVE D O G",
             "PX",
             address(dog20),
@@ -54,9 +54,10 @@ contract PXRandomnessTest is Test {
         );
 
         ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
-        px = PX(address(proxy));
+        px = PXV3(address(proxy));
 
         px.unpause();
+        px.startMinting();
         px.setTokenLockAmount(address(dog20), DOG_TO_PIXEL_SATOSHIS);
     }
 
@@ -142,7 +143,7 @@ contract PXReservationSkipTest is Test {
     string constant MOCK_URI = "ipfs://dog-repo/";
     uint256 constant DOG_TO_PIXEL_SATOSHIS = 1000 * 10 ** 18;
 
-    PX public px;
+    PXV3 public px;
     ERC20Mock public dog20;
     address public owner;
     address public minter;
@@ -157,10 +158,10 @@ contract PXReservationSkipTest is Test {
 
         dog20 = new ERC20Mock();
 
-        PX implementation = new PX();
+        PXV3 implementation = new PXV3();
 
         bytes memory initData = abi.encodeWithSelector(
-            PX.__PX_init.selector,
+            PXV3.__PX_init.selector,
             "LONG LIVE D O G",
             "PX",
             address(dog20),
@@ -172,7 +173,7 @@ contract PXReservationSkipTest is Test {
         );
 
         ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
-        px = PX(address(proxy));
+        px = PXV3(address(proxy));
 
         // Contract starts paused - configure lock amount while paused
         px.setTokenLockAmount(address(dog20), DOG_TO_PIXEL_SATOSHIS);
@@ -244,6 +245,7 @@ contract PXReservationSkipTest is Test {
 
         // Step 4: Unpause and mint
         px.unpause();
+        px.startMinting();
 
         vm.prank(minter);
         vm.recordLogs();
@@ -297,6 +299,7 @@ contract PXReservationSkipTest is Test {
 
         // Unpause and mint
         px.unpause();
+        px.startMinting();
 
         vm.prank(minter);
         vm.recordLogs();
@@ -346,6 +349,7 @@ contract PXReservationSkipTest is Test {
 
         // Unpause
         px.unpause();
+        px.startMinting();
 
         // Regular user mints several tokens (none should be the reserved one)
         vm.prank(minter);

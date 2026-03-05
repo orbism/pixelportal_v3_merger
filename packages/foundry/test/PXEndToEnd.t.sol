@@ -2,12 +2,12 @@
 pragma solidity ^0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
-import {PX} from "../src/PX.sol";
+import {PXV3} from "../src/PXV3.sol";
 import {MockDOG20} from "./mocks/MockDOG20.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 // Import custom errors
-import {NoPuppersRemaining, NonPositiveQuantity} from "../src/PX.sol";
+import {NoPuppersRemaining, NonPositiveQuantity} from "../src/PXV3.sol";
 
 import {ERC721OwnerQueryForNonexistentToken} from "../src/ERC721CustomUpgradeable.sol";
 
@@ -23,7 +23,7 @@ import {ERC721OwnerQueryForNonexistentToken} from "../src/ERC721CustomUpgradeabl
  * - Verify counts, ownership, and edge cases throughout
  */
 contract PXEndToEnd is Test {
-    PX public pxToken;
+    PXV3 public pxToken;
     MockDOG20 public dogToken;
     ERC1967Proxy public proxy;
 
@@ -71,12 +71,12 @@ contract PXEndToEnd is Test {
         // Deploy DOG20 mock token
         dogToken = new MockDOG20();
 
-        // Deploy PX implementation
-        PX implementation = new PX();
+        // Deploy PXV3 implementation
+        PXV3 implementation = new PXV3();
 
         // Prepare initialization data
         bytes memory initData = abi.encodeWithSelector(
-            PX.__PX_init.selector,
+            PXV3.__PX_init.selector,
             "Pixel Token",
             "PX",
             address(dogToken),
@@ -90,8 +90,8 @@ contract PXEndToEnd is Test {
         // Deploy UUPS proxy
         proxy = new ERC1967Proxy(address(implementation), initData);
 
-        // Cast proxy to PX interface
-        pxToken = PX(address(proxy));
+        // Cast proxy to PXV3 interface
+        pxToken = PXV3(address(proxy));
 
         // Configure DOG20 token for locking (required for new token lock system)
         pxToken.setTokenLockAmount(address(dogToken), DOG_TO_PIXEL_SATOSHIS);
@@ -261,6 +261,7 @@ contract PXEndToEnd is Test {
 
         // Unpause contract for normal minting
         pxToken.unpause();
+        pxToken.startMinting();
         assertFalse(pxToken.paused());
 
         console.log("Moved to minting phase - contract unpaused");
@@ -487,62 +488,6 @@ contract PXEndToEnd is Test {
         console.log("  Total:", totalMinted + pxToken.puppersRemaining() + totalReserved);
     }
 
-    // Test burning functionality
-    function test_BurnFunctionality() public {
-        _moveToMintingPhase();
-
-        console.log("Testing burn functionality...");
-
-        // Mint some tokens first
-        vm.prank(minter1);
-        pxToken.mintPuppers(2, address(dogToken));
-
-        uint256 minter1Balance = pxToken.balanceOf(minter1);
-        uint256 puppersRemaining = pxToken.puppersRemaining();
-
-        // Get one of minter1's tokens
-        uint256 tokenToBurn = 0;
-        for (uint256 i = 0; i < TOTAL_SUPPLY; i++) {
-            uint256 tokenId = INDEX_OFFSET + i;
-            try pxToken.ownerOf(tokenId) returns (address tokenOwner) {
-                if (tokenOwner == minter1) {
-                    tokenToBurn = tokenId;
-                    break;
-                }
-            } catch {
-                // Token doesn't exist, continue
-            }
-        }
-
-        assertTrue(tokenToBurn != 0, "Should find a token to burn");
-
-        // Burn the token
-        uint256[] memory tokensToBurn = new uint256[](1);
-        tokensToBurn[0] = tokenToBurn;
-
-        uint256 dogBalanceBefore = dogToken.balanceOf(minter1);
-
-        vm.prank(minter1);
-        pxToken.burnPuppers(tokensToBurn);
-
-        // Verify burn effects
-        assertEq(pxToken.balanceOf(minter1), minter1Balance - 1);
-        assertEq(pxToken.puppersRemaining(), puppersRemaining + 1);
-
-        // Verify token no longer exists
-        vm.expectRevert(abi.encodeWithSelector(ERC721OwnerQueryForNonexistentToken.selector));
-        pxToken.ownerOf(tokenToBurn);
-
-        // Verify DOG refund (minus fees)
-        uint256 dogBalanceAfter = dogToken.balanceOf(minter1);
-        uint256 expectedRefund = DOG_TO_PIXEL_SATOSHIS - (DOG_TO_PIXEL_SATOSHIS / 100); // 1% dev fee
-        assertEq(dogBalanceAfter, dogBalanceBefore + expectedRefund);
-
-        console.log("  Burn functionality verified");
-        console.log("  Token burned:", tokenToBurn);
-        console.log("  Puppers remaining after burn:", pxToken.puppersRemaining());
-    }
-
     // Test edge case: mint and burn cycles
     function test_MintBurnCycles() public {
         _moveToMintingPhase();
@@ -695,5 +640,55 @@ contract PXEndToEnd is Test {
         assertTrue(pxToken.totalSupply() == TOTAL_SUPPLY);
 
         console.log("  Contract properly pausable for upgrades");
+    }
+
+    // Test: Burn returns 100% of locked tokens (no dev fee in V3)
+    function test_BurnFunctionality() public {
+        _moveToMintingPhase();
+
+        console.log("Testing burn functionality...");
+
+        vm.prank(minter1);
+        pxToken.mintPuppers(2, address(dogToken));
+
+        uint256 minter1Balance = pxToken.balanceOf(minter1);
+        uint256 puppersRemaining = pxToken.puppersRemaining();
+
+        uint256 tokenToBurn = 0;
+        for (uint256 i = 0; i < TOTAL_SUPPLY; i++) {
+            uint256 tokenId = INDEX_OFFSET + i;
+            try pxToken.ownerOf(tokenId) returns (address tokenOwner) {
+                if (tokenOwner == minter1) {
+                    tokenToBurn = tokenId;
+                    break;
+                }
+            } catch {
+                // Token doesn't exist, continue
+            }
+        }
+
+        assertTrue(tokenToBurn != 0, "Should find a token to burn");
+
+        uint256[] memory tokensToBurn = new uint256[](1);
+        tokensToBurn[0] = tokenToBurn;
+
+        uint256 dogBalanceBefore = dogToken.balanceOf(minter1);
+
+        vm.prank(minter1);
+        pxToken.burnPuppers(tokensToBurn);
+
+        assertEq(pxToken.balanceOf(minter1), minter1Balance - 1);
+        assertEq(pxToken.puppersRemaining(), puppersRemaining + 1);
+
+        vm.expectRevert(abi.encodeWithSelector(ERC721OwnerQueryForNonexistentToken.selector));
+        pxToken.ownerOf(tokenToBurn);
+
+        // V3: 100% refund (no dev fee)
+        uint256 dogBalanceAfter = dogToken.balanceOf(minter1);
+        assertEq(dogBalanceAfter, dogBalanceBefore + DOG_TO_PIXEL_SATOSHIS);
+
+        console.log("  Burn functionality verified");
+        console.log("  Token burned:", tokenToBurn);
+        console.log("  Puppers remaining after burn:", pxToken.puppersRemaining());
     }
 }

@@ -3,7 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {PX} from "../src/PX.sol";
+import {PXV3} from "../src/PXV3.sol";
 import {MockDOG20} from "./mocks/MockDOG20.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
@@ -36,7 +36,7 @@ contract PXOrphanedTokenFixTest is Test {
     uint256 constant DOG_TO_PIXEL_SATOSHIS = 5523989899 * 10 ** 13;
     uint256 constant INDEX_OFFSET = 1000000;
 
-    PX public px;
+    PXV3 public px;
     MockDOG20 public dog20;
 
     address public admin;
@@ -50,9 +50,9 @@ contract PXOrphanedTokenFixTest is Test {
 
         dog20 = new MockDOG20();
 
-        PX implementation = new PX();
+        PXV3 implementation = new PXV3();
         bytes memory initData = abi.encodeWithSelector(
-            PX.__PX_init.selector,
+            PXV3.__PX_init.selector,
             "Orphan Fix Test",
             "OFT",
             address(dog20),
@@ -64,7 +64,7 @@ contract PXOrphanedTokenFixTest is Test {
         );
 
         ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
-        px = PX(address(proxy));
+        px = PXV3(address(proxy));
 
         vm.prank(admin);
         px.setTokenLockAmount(address(dog20), DOG_TO_PIXEL_SATOSHIS);
@@ -180,6 +180,9 @@ contract PXOrphanedTokenFixTest is Test {
         vm.prank(admin);
         px.unpause();
 
+        vm.prank(admin);
+        px.startMinting();
+
         console.log("Minting 2000 tokens...");
         uint256 minted = 0;
         for (uint256 i = 0; i < 2000; i++) {
@@ -230,6 +233,9 @@ contract PXOrphanedTokenFixTest is Test {
         // Unpause and mint ALL remaining tokens
         vm.prank(admin);
         px.unpause();
+
+        vm.prank(admin);
+        px.startMinting();
 
         console.log("Minting all remaining tokens...");
         uint256 minted = 0;
@@ -360,6 +366,9 @@ contract PXOrphanedTokenFixTest is Test {
         // Step 3: Unpause for new minting
         vm.prank(admin);
         px.unpause();
+
+        vm.prank(admin);
+        px.startMinting();
         console.log("Step 2: Contract unpaused");
 
         // Step 4: New users mint

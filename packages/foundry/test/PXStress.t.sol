@@ -3,13 +3,13 @@ pragma solidity ^0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {PX} from "../src/PX.sol";
+import {PXV3} from "../src/PXV3.sol";
 import {MockDOG20} from "./mocks/MockDOG20.sol";
 import {TestUtils} from "./utils/TestUtils.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 // Import custom errors
-import {NoPuppersRemaining, NoLockFoundForPixel, PupperIsNotYours} from "../src/PX.sol";
+import {NoPuppersRemaining, NoLockFoundForPixel, PupperIsNotYours} from "../src/PXV3.sol";
 
 /**
  * @title PXStressTest
@@ -28,7 +28,7 @@ contract PXStressTest is Test {
     uint256 constant INDEX_OFFSET = 1000000;
     uint256 constant SHARD_SIZE = 5000;
 
-    PX public px;
+    PXV3 public px;
     MockDOG20 public dog20;
 
     address public owner;
@@ -54,9 +54,9 @@ contract PXStressTest is Test {
         dog20 = new MockDOG20();
         dog20.initialize(mockAddresses, DOG_TO_PIXEL_SATOSHIS * MOCK_SUPPLY * 10); // Extra tokens for stress testing
 
-        PX implementation = new PX();
+        PXV3 implementation = new PXV3();
         bytes memory initData = abi.encodeWithSelector(
-            PX.__PX_init.selector,
+            PXV3.__PX_init.selector,
             "STRESS TEST PX",
             "SPX",
             address(dog20),
@@ -68,10 +68,11 @@ contract PXStressTest is Test {
         );
 
         ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
-        px = PX(address(proxy));
+        px = PXV3(address(proxy));
 
         // Contract starts paused, so unpause it for stress testing
         px.unpause();
+        px.startMinting();
 
         // Configure DOG20 token for locking (required for new token lock system)
         px.setTokenLockAmount(address(dog20), DOG_TO_PIXEL_SATOSHIS);
@@ -349,26 +350,6 @@ contract PXStressTest is Test {
         px.burnPuppers(tokensToBurn);
     }
 
-    // Test: Fee distribution accuracy
-    function test_FeeDistributionAccuracy() public {
-        uint256[] memory tokens = mintPuppers(addr1, 1);
-
-        uint256 devBalanceBefore = dog20.balanceOf(feesAccountDev);
-        uint256 userBalanceBefore = dog20.balanceOf(addr1);
-
-        vm.prank(addr1);
-        px.burnPuppers(tokens);
-
-        uint256 expectedDevFee = DOG_TO_PIXEL_SATOSHIS / 100; // 1% total fee to dev
-        uint256 expectedUserAmount = DOG_TO_PIXEL_SATOSHIS - expectedDevFee; // 99% to user
-
-        assertEq(dog20.balanceOf(feesAccountDev), devBalanceBefore + expectedDevFee);
-        assertEq(dog20.balanceOf(addr1), userBalanceBefore + expectedUserAmount);
-
-        // Verify total adds up
-        assertEq(expectedDevFee + expectedUserAmount, DOG_TO_PIXEL_SATOSHIS);
-    }
-
     // Test: Gas efficiency for random operations
     function test_GasEfficiency() public {
         uint256 mintGas = 0;
@@ -436,5 +417,20 @@ contract PXStressTest is Test {
         // Total supply should always equal puppersRemaining + currently minted tokens
         uint256 currentlyMinted = MOCK_SUPPLY - px.puppersRemaining();
         assertEq(px.totalSupply(), px.puppersRemaining() + currentlyMinted);
+    }
+
+    // Test: Burn returns 100% to user, 0% to dev (no fee in V3)
+    function test_FeeDistributionAccuracy() public {
+        uint256[] memory tokens = mintPuppers(addr1, 1);
+
+        uint256 devBalanceBefore = dog20.balanceOf(feesAccountDev);
+        uint256 userBalanceBefore = dog20.balanceOf(addr1);
+
+        vm.prank(addr1);
+        px.burnPuppers(tokens);
+
+        // V3: 100% to user, 0% to dev
+        assertEq(dog20.balanceOf(feesAccountDev), devBalanceBefore);
+        assertEq(dog20.balanceOf(addr1), userBalanceBefore + DOG_TO_PIXEL_SATOSHIS);
     }
 }

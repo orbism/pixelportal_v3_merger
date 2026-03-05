@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {PX} from "../../src/PX.sol";
+import {PXV3} from "../../src/PXV3.sol";
 
 /**
  * @title TestUtils
@@ -78,7 +78,7 @@ library TestUtils {
      * @param dog20Address Address of the DOG20 token
      * @param lockAmount Amount to lock per pixel (usually DOG_TO_PIXEL_SATOSHIS)
      */
-    function configureDOG20ForLocking(PX px, address dog20Address, uint256 lockAmount) internal {
+    function configureDOG20ForLocking(PXV3 px, address dog20Address, uint256 lockAmount) internal {
         px.setTokenLockAmount(dog20Address, lockAmount);
     }
 }

@@ -2,18 +2,17 @@
 pragma solidity ^0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
-import {PX} from "../src/PX.sol";
-import {PXV2} from "../src/PXV2.sol";
+import {PXV3} from "../src/PXV3.sol";
 import {MockDOG20} from "./mocks/MockDOG20.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
  * @title PXDeployment
- * @dev Comprehensive deployment validation tests for PX deployment and upgrade using UUPS and CREATE2
+ * @dev Comprehensive deployment validation tests for PXV3 deployment and upgrade using UUPS and CREATE2
  *
  * This test suite validates:
- * 1. DeployPXUUPS.s.sol script functionality
+ * 1. DeployPXV3UUPS.s.sol script functionality
  * 2. UUPS upgrade functionality
  * 3. CREATE2 deterministic deployment
  * 4. End-to-end deployment workflows
@@ -34,9 +33,9 @@ contract PXDeployment is Test {
     MockDOG20 public dogToken;
 
     // Deployment artifacts
-    PX public implementation;
+    PXV3 public implementation;
     ERC1967Proxy public proxy;
-    PX public pxToken;
+    PXV3 public pxToken;
 
     // Test addresses
     address public devFeeAddress;
@@ -53,7 +52,7 @@ contract PXDeployment is Test {
     uint256 public constant TOTAL_SUPPLY = TEST_SHIBA_WIDTH * TEST_SHIBA_HEIGHT;
 
     // Salt for CREATE2 deployments (matching script)
-    bytes32 public constant DEPLOY_SALT = keccak256("PX_TOKEN_UUPS_V1");
+    bytes32 public constant DEPLOY_SALT = keccak256("PXV3_UUPS_v1");
 
     function setUp() public {
         // Set up test environment to match script expectations
@@ -88,17 +87,17 @@ contract PXDeployment is Test {
      * @dev Test full UUPS deployment script functionality
      */
     function test_DeployPXUUPSScript() public {
-        console.log("Testing DeployPXUUPS script...");
+        console.log("Testing DeployPXV3UUPS script...");
 
         // Execute deployment logic (simulating script execution)
         vm.startPrank(deployer);
 
         // 1. Deploy implementation contract (regular deployment, not CREATE2)
-        implementation = new PX();
+        implementation = new PXV3();
 
         // 2. Prepare initialization data with owner parameter
         bytes memory initData = abi.encodeWithSelector(
-            PX.__PX_init.selector,
+            PXV3.__PX_init.selector,
             TEST_TOKEN_NAME,
             TEST_TOKEN_SYMBOL,
             address(dogToken),
@@ -113,7 +112,7 @@ contract PXDeployment is Test {
         bytes memory bytecode =
             abi.encodePacked(type(ERC1967Proxy).creationCode, abi.encode(address(implementation), initData));
 
-        bytes32 salt = keccak256("PX_UUPS_v1");
+        bytes32 salt = keccak256("PXV3_UUPS_v1");
         bytes memory deployData = abi.encodePacked(salt, bytecode);
 
         (bool success, bytes memory returnData) = NICK_FACTORY.call(deployData);
@@ -129,8 +128,8 @@ contract PXDeployment is Test {
 
         vm.stopPrank();
 
-        // Cast proxy to PX interface
-        pxToken = PX(address(proxy));
+        // Cast proxy to PXV3 interface
+        pxToken = PXV3(address(proxy));
 
         // ===== DEPLOYMENT VERIFICATION (as script does) =====
 
@@ -168,10 +167,10 @@ contract PXDeployment is Test {
 
         // Deploy implementation first
         vm.prank(deployer);
-        PX testImplementation = new PX();
+        PXV3 testImplementation = new PXV3();
 
         bytes memory initData = abi.encodeWithSelector(
-            PX.__PX_init.selector,
+            PXV3.__PX_init.selector,
             "Test Token",
             "TEST",
             address(dogToken),
@@ -251,16 +250,16 @@ contract PXDeployment is Test {
 
         vm.startPrank(deployer);
 
-        // Deploy new V2 implementation (regular deployment)
-        PXV2 implementationV2 = new PXV2();
+        // Deploy new PXV3 implementation
+        PXV3 newImplementation = new PXV3();
 
         // Get current implementation
         bytes32 implSlot = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
         address oldImplementation = address(uint160(uint256(vm.load(address(proxy), implSlot))));
 
         // Validate upgrade pre-conditions
-        require(oldImplementation != address(implementationV2), "New implementation is the same as current");
-        require(address(implementationV2).code.length > 0, "New implementation is not a contract");
+        require(oldImplementation != address(newImplementation), "New implementation is the same as current");
+        require(address(newImplementation).code.length > 0, "New implementation is not a contract");
 
         // Check pre-upgrade state
         uint256 preUpgradeSupply = pxToken.totalSupply();
@@ -268,7 +267,7 @@ contract PXDeployment is Test {
         string memory preUpgradeName = pxToken.name();
 
         // Execute upgrade via UUPS
-        UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(implementationV2), "");
+        UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(newImplementation), "");
 
         vm.stopPrank();
 
@@ -276,25 +275,17 @@ contract PXDeployment is Test {
 
         // Verify upgrade occurred
         address currentImplementation = address(uint160(uint256(vm.load(address(proxy), implSlot))));
-        assertEq(currentImplementation, address(implementationV2));
+        assertEq(currentImplementation, address(newImplementation));
 
         // Verify state preservation
         assertEq(pxToken.totalSupply(), preUpgradeSupply);
         assertEq(pxToken.puppersRemaining(), preUpgradeRemaining);
         assertEq(pxToken.name(), preUpgradeName);
 
-        // Cast to V2 and verify it works
-        PXV2 pxTokenV2 = PXV2(address(proxy));
-
-        // Verify V2 has same functionality as V1
-        assertEq(pxTokenV2.totalSupply(), preUpgradeSupply);
-        assertEq(pxTokenV2.puppersRemaining(), preUpgradeRemaining);
-
         console.log("  UUPS upgrade script validation successful");
         console.log("  Old implementation:", oldImplementation);
-        console.log("  New implementation:", address(implementationV2));
+        console.log("  New implementation:", address(newImplementation));
         console.log("  State preserved across upgrade");
-        console.log("  V2 functionality accessible");
     }
 
     /**
@@ -306,8 +297,8 @@ contract PXDeployment is Test {
         // Deploy initial system
         test_DeployPXUUPSScript();
 
-        // Deploy V2 implementation
-        PXV2 implementationV2 = new PXV2();
+        // Deploy new implementation
+        PXV3 newImplementation = new PXV3();
 
         // Test: Non-admin cannot upgrade
         vm.startPrank(user1);
@@ -316,17 +307,17 @@ contract PXDeployment is Test {
                 "AccessControlUnauthorizedAccount(address,bytes32)", user1, pxToken.DEFAULT_ADMIN_ROLE()
             )
         );
-        UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(implementationV2), "");
+        UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(newImplementation), "");
         vm.stopPrank();
 
         // Test: Owner can upgrade
         vm.prank(deployer);
-        UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(implementationV2), "");
+        UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(newImplementation), "");
 
         // Verify upgrade succeeded
         bytes32 implSlot = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
         address currentImplementation = address(uint160(uint256(vm.load(address(proxy), implSlot))));
-        assertEq(currentImplementation, address(implementationV2));
+        assertEq(currentImplementation, address(newImplementation));
 
         console.log("  Upgrade access control validated");
     }
@@ -346,8 +337,9 @@ contract PXDeployment is Test {
 
         // 2. Test initial functionality
         vm.startPrank(deployer);
-        pxToken.unpause(); // Enable minting
-        // Configure DOG20 token for locking (required for new token lock system)
+        pxToken.unpause(); // Enable operations
+        pxToken.startMinting(); // Enable minting
+        // Configure DOG20 token for locking (required for token lock system)
         uint256 dogToPixelSatoshis = DOG_TO_PIXEL_SATOSHIS;
         pxToken.setTokenLockAmount(address(dogToken), dogToPixelSatoshis);
         vm.stopPrank();
@@ -363,35 +355,30 @@ contract PXDeployment is Test {
         vm.prank(user2);
         dogToken.approve(address(pxToken), dogAmount);
 
-        // Test V1 minting (V1 doesn't have mintingStarted check)
+        // Test minting
         vm.prank(user1);
         pxToken.mintPuppers(2, address(dogToken));
         assertEq(pxToken.balanceOf(user1), 2);
 
-        // 3. Upgrade to V2
+        // 3. Upgrade to new implementation
         vm.startPrank(deployer);
-        PXV2 implementationV2 = new PXV2();
-        UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(implementationV2), "");
+        PXV3 newImplementation = new PXV3();
+        UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(newImplementation), "");
         vm.stopPrank();
 
-        // 4. Test V2 functionality
-        PXV2 pxTokenV2 = PXV2(address(proxy));
-        assertEq(pxTokenV2.balanceOf(user1), 2); // State preserved
-
-        // V2 requires startMinting() before minting can work
-        vm.prank(deployer);
-        pxTokenV2.startMinting();
+        // 4. Test functionality after upgrade
+        assertEq(pxToken.balanceOf(user1), 2); // State preserved
 
         // Test minting still works after upgrade
         vm.prank(user2);
-        pxTokenV2.mintPuppers(2, address(dogToken));
-        assertEq(pxTokenV2.balanceOf(user2), 2);
+        pxToken.mintPuppers(2, address(dogToken));
+        assertEq(pxToken.balanceOf(user2), 2);
 
         console.log("  Complete workflow validated");
-        console.log("  V1 state preserved after upgrade");
-        console.log("  V2 functionality working correctly");
-        console.log("  User1 balance:", pxTokenV2.balanceOf(user1));
-        console.log("  User2 balance:", pxTokenV2.balanceOf(user2));
+        console.log("  State preserved after upgrade");
+        console.log("  Functionality working correctly");
+        console.log("  User1 balance:", pxToken.balanceOf(user1));
+        console.log("  User2 balance:", pxToken.balanceOf(user2));
     }
 
     /**
@@ -434,31 +421,30 @@ contract PXDeployment is Test {
     }
 
     /**
-     * @dev Test multiple CREATE2 deployments for different versions
+     * @dev Test multiple PXV3 implementation deployments
      */
     function test_MultipleVersionDeployments() public {
-        console.log("Testing multiple version deployments...");
+        console.log("Testing multiple implementation deployments...");
 
         vm.startPrank(deployer);
 
-        // Deploy V1 implementation
-        PX v1Implementation = new PX();
-        address v1Address = address(v1Implementation);
+        // Deploy two PXV3 implementations
+        PXV3 implementation1 = new PXV3();
+        address addr1 = address(implementation1);
 
-        // Deploy V2 implementation
-        PXV2 v2Implementation = new PXV2();
-        address v2Address = address(v2Implementation);
+        PXV3 implementation2 = new PXV3();
+        address addr2 = address(implementation2);
 
         vm.stopPrank();
 
         // Verify different addresses
-        assertTrue(v1Address != v2Address);
-        assertTrue(v1Address.code.length > 0);
-        assertTrue(v2Address.code.length > 0);
+        assertTrue(addr1 != addr2);
+        assertTrue(addr1.code.length > 0);
+        assertTrue(addr2.code.length > 0);
 
-        console.log("  Multiple version deployments successful");
-        console.log("  V1 implementation:", v1Address);
-        console.log("  V2 implementation:", v2Address);
+        console.log("  Multiple implementation deployments successful");
+        console.log("  Implementation 1:", addr1);
+        console.log("  Implementation 2:", addr2);
     }
 
     // ===============================
@@ -479,7 +465,7 @@ contract PXDeployment is Test {
         require(newImplementation.code.length > 0, "New implementation is not a contract");
 
         // Validate storage layout (basic check)
-        PX currentProxy = PX(proxyAddress);
+        PXV3 currentProxy = PXV3(proxyAddress);
         currentProxy.puppersRemaining(); // Should not revert
         currentProxy.INDEX_OFFSET(); // Should not revert
     }

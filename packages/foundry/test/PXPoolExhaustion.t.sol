@@ -3,13 +3,13 @@ pragma solidity ^0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {PX} from "../src/PX.sol";
+import {PXV3} from "../src/PXV3.sol";
 import {MockDOG20} from "./mocks/MockDOG20.sol";
 import {TestUtils} from "./utils/TestUtils.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 // Import custom errors
-import {NoPuppersRemaining, TokenNotAvailableForMinting, TokenAlreadyReserved} from "../src/PX.sol";
+import {NoPuppersRemaining, TokenNotAvailableForMinting, TokenAlreadyReserved} from "../src/PXV3.sol";
 
 /**
  * @title PXPoolExhaustionTest
@@ -29,7 +29,7 @@ contract PXPoolExhaustionTest is Test {
     uint256 constant DOG_TO_PIXEL_SATOSHIS = 5523989899 * 10 ** 13;
     uint256 constant INDEX_OFFSET = 1000000;
 
-    PX public px;
+    PXV3 public px;
     MockDOG20 public dog20;
 
     address public owner;
@@ -46,9 +46,9 @@ contract PXPoolExhaustionTest is Test {
         // Deploy contracts
         dog20 = new MockDOG20();
 
-        PX implementation = new PX();
+        PXV3 implementation = new PXV3();
         bytes memory initData = abi.encodeWithSelector(
-            PX.__PX_init.selector,
+            PXV3.__PX_init.selector,
             "Pool Exhaustion Test",
             "PET",
             address(dog20),
@@ -60,7 +60,7 @@ contract PXPoolExhaustionTest is Test {
         );
 
         ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
-        px = PX(address(proxy));
+        px = PXV3(address(proxy));
 
         // Configure DOG20 token for locking
         vm.prank(admin);
@@ -197,6 +197,9 @@ contract PXPoolExhaustionTest is Test {
         vm.prank(admin);
         px.unpause();
 
+        vm.prank(admin);
+        px.startMinting();
+
         uint256 expectedMintable = MOCK_SUPPLY - reservationCount;
         uint256 mintedCount = 0;
         uint256[] memory mintedTokens = new uint256[](expectedMintable);
@@ -309,6 +312,9 @@ contract PXPoolExhaustionTest is Test {
         vm.prank(admin);
         px.unpause();
 
+        vm.prank(admin);
+        px.startMinting();
+
         uint256 expectedMintable = MOCK_SUPPLY - reservationCount;
         uint256 mintedCount = 0;
 
@@ -345,6 +351,9 @@ contract PXPoolExhaustionTest is Test {
         // Contract starts paused; unpause to begin
         vm.prank(admin);
         px.unpause();
+
+        vm.prank(admin);
+        px.startMinting();
 
         // Do 10 rounds of: reserve some, mint some
         for (uint256 round = 0; round < 10; round++) {
@@ -509,6 +518,9 @@ contract PXPoolExhaustionTest is Test {
         vm.prank(admin);
         px.unpause();
 
+        vm.prank(admin);
+        px.startMinting();
+
         vm.prank(minter);
         vm.expectRevert(abi.encodeWithSelector(NoPuppersRemaining.selector));
         px.mintPuppers(1, address(dog20));
@@ -551,6 +563,9 @@ contract PXPoolExhaustionTest is Test {
         // Unpause and do some random minting
         vm.prank(admin);
         px.unpause();
+
+        vm.prank(admin);
+        px.startMinting();
 
         for (uint256 i = 0; i < 100; i++) {
             uint256 tokenId = mintSingle(minter);
@@ -638,6 +653,9 @@ contract PXPoolExhaustionTest is Test {
         // Unpause and exhaust pool
         vm.prank(admin);
         px.unpause();
+
+        vm.prank(admin);
+        px.startMinting();
 
         uint256 mintedCount = 0;
         while (px.puppersRemaining() > 0) {

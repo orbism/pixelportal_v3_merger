@@ -2,15 +2,15 @@
 pragma solidity ^0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
-import {PX} from "../src/PX.sol";
+import {PXV3} from "../src/PXV3.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 // Import custom errors
-import {BurnNotConfirmed, NotReservedForYou, TokenAlreadyReserved, TokenNotReserved} from "../src/PX.sol";
+import {BurnNotConfirmed, NotReservedForYou, TokenAlreadyReserved, TokenNotReserved} from "../src/PXV3.sol";
 
 contract PXReservationTest is Test {
-    PX public px;
+    PXV3 public px;
     ERC20Mock public dog20;
 
     address public owner = address(0x1);
@@ -28,16 +28,16 @@ contract PXReservationTest is Test {
         // Deploy mock DOG token
         dog20 = new ERC20Mock();
 
-        // Deploy PX implementation
-        PX implementation = new PX();
+        // Deploy PXV3 implementation
+        PXV3 implementation = new PXV3();
 
         // Deploy proxy
         bytes memory initData = abi.encodeWithSelector(
-            PX.__PX_init.selector, "Pixel", "PX", address(dog20), "ipfs://", 1000, 1000, owner, owner
+            PXV3.__PX_init.selector, "Pixel", "PX", address(dog20), "ipfs://", 1000, 1000, owner, owner
         );
 
         ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
-        px = PX(address(proxy));
+        px = PXV3(address(proxy));
 
         // Contract starts paused, configure DOG20 token while paused
         vm.startPrank(owner);
@@ -229,65 +229,6 @@ contract PXReservationTest is Test {
         px.claimReservedToken(tokenId, address(dog20));
     }
 
-    function test_ReservationWorkflow() public {
-        // Complete workflow: reserve -> set burn flags -> claim
-        uint256[] memory tokenIds = new uint256[](3);
-        tokenIds[0] = INDEX_OFFSET + 1;
-        tokenIds[1] = INDEX_OFFSET + 2;
-        tokenIds[2] = INDEX_OFFSET + 3;
-
-        address[] memory recipients = new address[](3);
-        recipients[0] = user1;
-        recipients[1] = user2;
-        recipients[2] = user1;
-
-        // Step 1: Reserve tokens
-        vm.prank(owner);
-        px.reserveTokensForMigration(tokenIds, recipients);
-
-        assertEq(px.totalReserved(), 3);
-        assertEq(px.getAvailableSupply(), px.puppersRemaining() - 3);
-
-        // Step 2: Set burn flags (only for some tokens)
-        uint256[] memory burnTokenIds = new uint256[](2);
-        burnTokenIds[0] = tokenIds[0];
-        burnTokenIds[1] = tokenIds[2];
-
-        bool[] memory burnStatuses = new bool[](2);
-        burnStatuses[0] = true;
-        burnStatuses[1] = true;
-
-        vm.prank(owner);
-        px.setBurnFlags(burnTokenIds, burnStatuses);
-
-        // Step 3: Check claim eligibility
-        assertTrue(px.canClaimReservedToken(tokenIds[0], user1));
-        assertFalse(px.canClaimReservedToken(tokenIds[1], user2)); // burn not confirmed
-        assertTrue(px.canClaimReservedToken(tokenIds[2], user1));
-
-        // Step 4: Unpause and claim
-        vm.prank(owner);
-        px.unpause();
-
-        vm.prank(user1);
-        px.claimReservedToken(tokenIds[0], address(dog20));
-
-        vm.prank(user1);
-        px.claimReservedToken(tokenIds[2], address(dog20));
-
-        // Verify final state
-        assertEq(px.ownerOf(tokenIds[0]), user1);
-        assertEq(px.ownerOf(tokenIds[2]), user1);
-        assertEq(px.balanceOf(user1), 2);
-        assertEq(px.totalReserved(), 1); // Only tokenIds[1] still reserved
-
-        // Token 1 should still be reserved
-        assertTrue(px.isReserved(tokenIds[1]));
-        (address reservedFor, bool burnConfirmed) = px.getReservation(tokenIds[1]);
-        assertEq(reservedFor, user2);
-        assertFalse(burnConfirmed);
-    }
-
     function test_ReservationsExcludedFromRegularMinting() public {
         // Reserve some tokens
         uint256[] memory tokenIds = new uint256[](10);
@@ -304,6 +245,9 @@ contract PXReservationTest is Test {
         // Unpause to allow regular minting
         vm.prank(owner);
         px.unpause();
+
+        vm.prank(owner);
+        px.startMinting();
 
         // Try to mint tokens - should not get any reserved ones
         vm.prank(user2);
@@ -555,6 +499,10 @@ contract PXReservationTest is Test {
 
         uint256 claimCost = user1BalanceBefore - dog20.balanceOf(user1);
 
+        // Start minting for regular mint
+        vm.prank(owner);
+        px.startMinting();
+
         // Record balances before regular mint
         uint256 user2BalanceBefore = dog20.balanceOf(user2);
 
@@ -601,6 +549,43 @@ contract PXReservationTest is Test {
         px.claimReservedToken(tokenId, address(dog20));
     }
 
+    function test_BurnedClaimedTokenCannotBeReclaimedAgain() public {
+        uint256 tokenId = INDEX_OFFSET + 1;
+        uint256[] memory tokenIds = new uint256[](1);
+        tokenIds[0] = tokenId;
+        address[] memory recipients = new address[](1);
+        recipients[0] = user1;
+
+        // Reserve and set burn flag
+        vm.startPrank(owner);
+        px.reserveTokensForMigration(tokenIds, recipients);
+        bool[] memory burnStatuses = new bool[](1);
+        burnStatuses[0] = true;
+        px.setBurnFlags(tokenIds, burnStatuses);
+        px.unpause();
+        vm.stopPrank();
+
+        // Claim the reserved token
+        vm.prank(user1);
+        px.claimReservedToken(tokenId, address(dog20));
+
+        // Verify reservation was cleared by the claim
+        assertFalse(px.isReserved(tokenId));
+        assertEq(px.totalReserved(), 0);
+
+        // Burn the token — this makes _exists(tokenId) return false again
+        uint256[] memory burnIds = new uint256[](1);
+        burnIds[0] = tokenId;
+        vm.prank(user1);
+        px.burnPuppers(burnIds);
+
+        // Even though the token no longer exists (burned), the reservation was
+        // cleared during claim, so claimReservedToken must revert
+        vm.expectRevert(abi.encodeWithSelector(TokenNotReserved.selector));
+        vm.prank(user1);
+        px.claimReservedToken(tokenId, address(dog20));
+    }
+
     function test_ClaimInsufficientFunds() public {
         uint256 tokenId = INDEX_OFFSET + 1;
         uint256[] memory tokenIds = new uint256[](1);
@@ -636,5 +621,67 @@ contract PXReservationTest is Test {
 
         // Verify reservation still exists (not cleared due to failed claim)
         assertTrue(px.isReserved(tokenId));
+    }
+
+    // Test: Full reservation workflow (reserve, set burn flags, claim)
+    function test_ReservationWorkflow() public {
+        uint256 supplyBefore = px.puppersRemaining();
+
+        uint256[] memory tokenIds = new uint256[](3);
+        tokenIds[0] = INDEX_OFFSET + 1;
+        tokenIds[1] = INDEX_OFFSET + 2;
+        tokenIds[2] = INDEX_OFFSET + 3;
+
+        address[] memory recipients = new address[](3);
+        recipients[0] = user1;
+        recipients[1] = user2;
+        recipients[2] = user1;
+
+        // Step 1: Reserve tokens
+        vm.prank(owner);
+        px.reserveTokensForMigration(tokenIds, recipients);
+
+        assertEq(px.totalReserved(), 3);
+        // puppersRemaining should decrease by reservation count
+        assertEq(px.puppersRemaining(), supplyBefore - 3);
+        assertEq(px.getAvailableSupply(), supplyBefore - 3);
+
+        // Step 2: Set burn flags (only for some tokens)
+        uint256[] memory burnTokenIds = new uint256[](2);
+        burnTokenIds[0] = tokenIds[0];
+        burnTokenIds[1] = tokenIds[2];
+
+        bool[] memory burnStatuses = new bool[](2);
+        burnStatuses[0] = true;
+        burnStatuses[1] = true;
+
+        vm.prank(owner);
+        px.setBurnFlags(burnTokenIds, burnStatuses);
+
+        // Step 3: Check claim eligibility
+        assertTrue(px.canClaimReservedToken(tokenIds[0], user1));
+        assertFalse(px.canClaimReservedToken(tokenIds[1], user2)); // burn not confirmed
+        assertTrue(px.canClaimReservedToken(tokenIds[2], user1));
+
+        // Step 4: Unpause and claim
+        vm.prank(owner);
+        px.unpause();
+
+        vm.prank(user1);
+        px.claimReservedToken(tokenIds[0], address(dog20));
+
+        vm.prank(user1);
+        px.claimReservedToken(tokenIds[2], address(dog20));
+
+        // Verify final state
+        assertEq(px.ownerOf(tokenIds[0]), user1);
+        assertEq(px.ownerOf(tokenIds[2]), user1);
+        assertEq(px.balanceOf(user1), 2);
+        assertEq(px.totalReserved(), 1);
+
+        assertTrue(px.isReserved(tokenIds[1]));
+        (address reservedFor, bool burnConfirmed) = px.getReservation(tokenIds[1]);
+        assertEq(reservedFor, user2);
+        assertFalse(burnConfirmed);
     }
 }
