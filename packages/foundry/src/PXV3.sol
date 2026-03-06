@@ -25,6 +25,7 @@ error NoTokensAvailableToRemoveFromPool();
 error NonPositiveQuantity();
 error NoPuppersRemaining();
 error InvalidTokenAddress();
+error InvalidOwner();
 error TokenNotConfiguredForLocking();
 error Overflow();
 error EmptyPuppers();
@@ -143,6 +144,7 @@ contract PXV3 is
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
 
+        if (owner_ == address(0)) revert InvalidOwner();
         _grantRole(DEFAULT_ADMIN_ROLE, owner_);
         _grantRole(BURN_FLAG_MANAGER_ROLE, owner_);
         _grantRole(PAUSE_MANAGER_ROLE, owner_);
