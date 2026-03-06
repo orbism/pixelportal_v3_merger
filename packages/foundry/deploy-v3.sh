@@ -1,7 +1,10 @@
 #!/bin/bash
 
 # PX Token Deployment Script
-# This script loads environment variables from .env and deploys the PX contract using Foundry
+# This script loads environment variables from a chain-specific .env file and deploys the PX contract using Foundry
+#
+# Usage: ./deploy-v3.sh <chain>
+#   chain: local, base-sepolia, base-mainnet
 
 set -e  # Exit on any error
 
@@ -29,10 +32,21 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Check if .env file exists
-if [ ! -f ".env" ]; then
-    print_error ".env file not found!"
-    print_status "Please create a .env file with the following variables:"
+# Check for required chain argument
+if [ -z "$1" ]; then
+    print_error "Missing required chain argument"
+    echo "Usage: ./deploy-v3.sh <chain>"
+    echo "  chain: local, base-sepolia, base-mainnet"
+    exit 1
+fi
+
+CHAIN="$1"
+ENV_FILE=".env.${CHAIN}"
+
+# Check if the chain-specific .env file exists
+if [ ! -f "$ENV_FILE" ]; then
+    print_error "${ENV_FILE} not found!"
+    print_status "Please create ${ENV_FILE} with the following variables:"
     echo "PRIVATE_KEY=your_private_key_here"
     echo "RPC_URL=your_rpc_url_here"
     echo "DOG20_TOKEN_ADDRESS=0x...  # the DOG token contract address"
@@ -41,10 +55,10 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
-# Load environment variables from .env file
-print_status "Loading environment variables from .env file..."
+# Load environment variables from chain-specific .env file
+print_status "Loading environment variables from ${ENV_FILE}..."
 set -a
-source .env
+source "$ENV_FILE"
 set +a
 
 # Validate required environment variables
@@ -63,7 +77,7 @@ print_status "Deployment Configuration:"
 echo "  RPC URL: $RPC_URL"
 echo "  Deployer Address: $(cast wallet address $PRIVATE_KEY 2>/dev/null || echo "Unable to derive address")"
 
-SCRIPT_PATH="script/DeployPXUUPS.s.sol:DeployPXUUPS"
+SCRIPT_PATH="script/DeployPXV3UUPS.s.sol:DeployPXV3UUPS"
 print_status "Deploying PX3 using UUPS proxy pattern"
 
 # Check if forge is installed
