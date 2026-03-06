@@ -336,7 +336,7 @@ contract PXLegacyCoreTest is Test {
 
         vm.expectRevert(
             abi.encodeWithSignature(
-                "AccessControlUnauthorizedAccount(address,bytes32)", address(this), px.DEFAULT_ADMIN_ROLE()
+                "AccessControlUnauthorizedAccount(address,bytes32)", address(this), px.PAUSE_MANAGER_ROLE()
             )
         );
         px.pause();
@@ -669,6 +669,5 @@ contract PXLegacyTokenLockTest is Test {
 
         vm.stopPrank();
     }
-
 }
 

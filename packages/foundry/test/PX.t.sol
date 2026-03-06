@@ -457,12 +457,12 @@ contract PXTest is Test {
         assertEq(px.ownerOf(tokenId), addr2);
     }
 
-    // Test: Only admin can pause/unpause
-    function test_OnlyOwnerCanPause() public {
-        // First verify that non-admin cannot pause
+    // Test: Only admin or pause manager can pause/unpause
+    function test_OnlyOwnerOrPauseManagerCanPause() public {
+        // Non-admin, non-pause-manager cannot pause
         vm.startPrank(addr1);
         vm.expectRevert(
-            abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", addr1, px.DEFAULT_ADMIN_ROLE())
+            abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", addr1, px.PAUSE_MANAGER_ROLE())
         );
         px.pause();
         vm.stopPrank();
@@ -470,13 +470,25 @@ contract PXTest is Test {
         // Admin can pause
         px.pause();
 
-        // Non-admin cannot unpause
+        // Non-admin, non-pause-manager cannot unpause
         vm.startPrank(addr1);
         vm.expectRevert(
-            abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", addr1, px.DEFAULT_ADMIN_ROLE())
+            abi.encodeWithSignature("AccessControlUnauthorizedAccount(address,bytes32)", addr1, px.PAUSE_MANAGER_ROLE())
         );
         px.unpause();
         vm.stopPrank();
+
+        // Pause manager can pause and unpause
+        px.unpause(); // admin unpauses first
+        px.grantRole(px.PAUSE_MANAGER_ROLE(), addr2);
+
+        vm.prank(addr2);
+        px.pause();
+        assertTrue(px.paused());
+
+        vm.prank(addr2);
+        px.unpause();
+        assertFalse(px.paused());
     }
 
     // Test: Metadata functions
@@ -581,5 +593,4 @@ contract PXTest is Test {
         // Gas usage should be reasonable (updated for security overflow checks)
         assertLt(gasUsed, 500000);
     }
-
 }

@@ -69,6 +69,8 @@ contract PXV3 is
     ReentrancyGuardUpgradeable
 {
     bytes32 public constant BURN_FLAG_MANAGER_ROLE = keccak256("BURN_FLAG_MANAGER_ROLE");
+    bytes32 public constant PAUSE_MANAGER_ROLE = keccak256("PAUSE_MANAGER_ROLE");
+
     uint256 public constant MAX_BATCH_SIZE = 50;
 
     // Fractional.art ERC20 contract holding $DOG tokens
@@ -143,6 +145,7 @@ contract PXV3 is
 
         _grantRole(DEFAULT_ADMIN_ROLE, owner_);
         _grantRole(BURN_FLAG_MANAGER_ROLE, owner_);
+        _grantRole(PAUSE_MANAGER_ROLE, owner_);
         _pause();
         require(DOG20Address != address(0));
         DOG20 = IERC20(DOG20Address);
@@ -707,13 +710,19 @@ contract PXV3 is
     event MigrationBatchMinted(uint256[] tokenIds, address[] recipients, uint256 batchSize);
     event MintingStarted();
 
-    /// @notice Pauses all minting and burning operations. Only callable by admin.
-    function pause() public onlyRole(DEFAULT_ADMIN_ROLE) {
+    /// @notice Pauses all minting, burning, and transfer operations. Callable by admin or pause manager.
+    function pause() public {
+        if (!hasRole(DEFAULT_ADMIN_ROLE, _msgSender()) && !hasRole(PAUSE_MANAGER_ROLE, _msgSender())) {
+            revert AccessControlUnauthorizedAccount(_msgSender(), PAUSE_MANAGER_ROLE);
+        }
         _pause();
     }
 
-    /// @notice Unpauses the contract, re-enabling minting and burning. Only callable by admin.
-    function unpause() public onlyRole(DEFAULT_ADMIN_ROLE) {
+    /// @notice Unpauses the contract, re-enabling minting, burning, and transfers. Callable by admin or pause manager.
+    function unpause() public {
+        if (!hasRole(DEFAULT_ADMIN_ROLE, _msgSender()) && !hasRole(PAUSE_MANAGER_ROLE, _msgSender())) {
+            revert AccessControlUnauthorizedAccount(_msgSender(), PAUSE_MANAGER_ROLE);
+        }
         _unpause();
     }
 

@@ -115,6 +115,19 @@ contract DeployPXV3UUPS is Script {
         pxToken.setTokenLockAmount(dog20Address, defaultLockAmount);
         console.log("Token lock amount set for DOG20:", defaultLockAmount);
 
+        // Grant pause manager role
+        address pauseManager1 = 0xf3A3d7f87EE5b778D3A50A6f7d8F16f7141Bd132;
+        address pauseManager2 = 0x1c563dCDb1a53c264f6bc94d783E9d4B25636C05;
+        pxToken.grantRole(pxToken.PAUSE_MANAGER_ROLE(), pauseManager1);
+        pxToken.grantRole(pxToken.PAUSE_MANAGER_ROLE(), pauseManager2);
+        console.log("Pause manager role granted to:", pauseManager1);
+        console.log("Pause manager role granted to:", pauseManager2);
+
+        // Grant burn flag manager role
+        address burnFlagManager = 0x6cc0eF15b62F440173Da4c1f063A51fC2642fbD3;
+        pxToken.grantRole(pxToken.BURN_FLAG_MANAGER_ROLE(), burnFlagManager);
+        console.log("Burn flag manager role granted to:", burnFlagManager);
+
         vm.stopBroadcast();
         console.log("\n=== DEPLOYMENT VERIFICATION ===");
         console.log("Token name:", pxToken.name());
