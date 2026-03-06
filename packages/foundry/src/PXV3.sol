@@ -193,15 +193,6 @@ contract PXV3 is
         super._burn(pupper);
     }
 
-    /// @dev Mints a specific token for migration without using the random selection pool.
-    /// @param to The recipient address.
-    /// @param tokenId The token ID to mint.
-    function _mintForMigration(address to, uint256 tokenId) internal {
-        super._mint(to, tokenId);
-        if (puppersRemaining == 0) revert NoPuppersRemainingForMigration();
-        puppersRemaining -= 1;
-    }
-
     /// @dev Enforces pause on all token movements (transfers, mints, and burns).
     function _beforeTokenTransfer(address from, address to, uint256 tokenId) internal virtual override {
         super._beforeTokenTransfer(from, to, tokenId);
