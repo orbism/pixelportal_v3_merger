@@ -1,1 +1,1 @@
-web: echo "STEP1: prisma generate" && npx yarn prisma:generate && echo "STEP2: prisma deploy" && npx yarn prisma:deploy && echo "STEP3: starting app" && npx yarn start:prod
+  web: yarn start:migrate:prod                                                                                                     
