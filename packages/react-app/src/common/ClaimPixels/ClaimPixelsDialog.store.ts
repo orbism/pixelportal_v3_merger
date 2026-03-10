@@ -260,6 +260,7 @@ class ClaimPixelsDialogStore extends Reactionable(
 
     try {
       await this.loadEligibility();
+      log(`Eligibility loaded — mainnet: [${this.eligibility.mainnet.join(',')}] (${this.eligibility.mainnet.length} tokens) | base: [${this.eligibility.base.join(',')}] (${this.eligibility.base.length} tokens)`);
 
       // Restore persisted burn state
       const stored = this.loadFromStorage();

@@ -5,7 +5,7 @@ import * as path from 'path';
 export interface SnapshotEntry {
   address: string;
   id: number;
-  network: 'mainnet' | 'sepolia' | 'base' | 'base-sepolia';
+  network: 'mainnet' | 'sepolia' | 'base' | 'base-mainnet' | 'base-sepolia';
 }
 
 export interface EligibilityResult {
@@ -72,7 +72,7 @@ export class MigrationService {
       if (entry.address.toLowerCase() === normalizedAddress) {
         if (entry.network === 'mainnet' || entry.network === 'sepolia') {
           mainnetPixels.push(entry.id);
-        } else if (entry.network === 'base') {
+        } else if (entry.network === 'base' || entry.network === 'base-mainnet') {
           basePixels.push(entry.id);
         } else if (entry.network === 'base-sepolia') {
           baseSepoliaPixels.push(entry.id);
@@ -106,7 +106,7 @@ export class MigrationService {
    */
   getSnapshotStats(): { total: number; mainnet: number; base: number; 'base-sepolia': number } {
     const mainnetCount = this.snapshot.filter((e) => e.network === 'mainnet').length;
-    const baseCount = this.snapshot.filter((e) => e.network === 'base').length;
+    const baseCount = this.snapshot.filter((e) => e.network === 'base' || e.network === 'base-mainnet').length;
     const baseSepoliaCount = this.snapshot.filter((e) => e.network === 'base-sepolia').length;
 
     return {
