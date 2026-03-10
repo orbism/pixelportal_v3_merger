@@ -44,7 +44,7 @@ let isShuttingDown = false;
 const chainMap: Record<string, Chain> = {
   "mainnet": mainnet,
   "sepolia": sepolia,
-  "base-mainnet": base,
+  "base": base,
   "base-sepolia": baseSepolia,
 };
 
