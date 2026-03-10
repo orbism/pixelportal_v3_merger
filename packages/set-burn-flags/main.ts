@@ -1,3 +1,4 @@
+import { load } from "@std/dotenv";
 import {
   createPublicClient,
   createWalletClient,
@@ -9,7 +10,7 @@ import {
 } from "viem";
 import { mainnet, sepolia, base, baseSepolia, type Chain } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
-import { get, set, close as closeDb } from "./db.ts";
+import { init as initDb, get, set, close as closeDb } from "./db.ts";
 import {
   withRateLimitRetry,
   getStoredBlock as getStoredBlockUtil,
@@ -17,6 +18,23 @@ import {
   delay,
   RATE_LIMIT_INITIAL_DELAY_MS,
 } from "./utils.ts";
+
+// Parse env name from CLI args
+const VALID_ENVS = ["local", "dev", "test", "prod"] as const;
+const envName = Deno.args[0];
+if (!envName || !VALID_ENVS.includes(envName as typeof VALID_ENVS[number])) {
+  console.error(`Usage: deno task run <env>\n  env must be one of: ${VALID_ENVS.join(", ")}`);
+  Deno.exit(1);
+}
+
+// Load environment variables from .env.{envName}
+const envPath = new URL(`./.env.${envName}`, import.meta.url).pathname;
+await load({ envPath, export: true });
+
+// Initialize database with env-prefixed name
+const dbPath = new URL(`./priv/${envName}-store.db`, import.meta.url).pathname;
+initDb(dbPath);
+console.log(`Environment: ${envName}, DB: ${envName}-store.db`);
 
 // Track unsubscribe functions for graceful shutdown
 const unsubscribers: Array<() => void> = [];
@@ -26,7 +44,7 @@ let isShuttingDown = false;
 const chainMap: Record<string, Chain> = {
   "mainnet": mainnet,
   "sepolia": sepolia,
-  "base": base,
+  "base-mainnet": base,
   "base-sepolia": baseSepolia,
 };
 

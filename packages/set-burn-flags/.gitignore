@@ -1,12 +1,11 @@
 # Database
-priv/store.db
-priv/store.db-journal
-priv/store.db-wal
-priv/store.db-shm
+priv/*.db
+priv/*.db-journal
+priv/*.db-wal
+priv/*.db-shm
 
 # Environment
-.env.local
-.env.*.local
+.env.*
 .env
 
 # OS

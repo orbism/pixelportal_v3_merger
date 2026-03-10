@@ -91,34 +91,46 @@ export function createInMemoryKVStore(): KVStore {
   };
 }
 
-// Default production database
-const DB_PATH = new URL("./priv/store.db", import.meta.url).pathname;
-const defaultStore = createKVStore(DB_PATH);
+// Lazily initialized default store
+let defaultStore: KVStore | null = null;
 
-// Export functions that use the default store for backwards compatibility
+function getDefaultStore(): KVStore {
+  if (!defaultStore) {
+    throw new Error("Database not initialized. Call init() first.");
+  }
+  return defaultStore;
+}
+
+// Initialize the default store with a given path
+export function init(dbPath: string): void {
+  if (defaultStore) {
+    throw new Error("Database already initialized.");
+  }
+  defaultStore = createKVStore(dbPath);
+}
+
+// Export functions that use the default store
 export function get(key: string): string | null {
-  return defaultStore.get(key);
+  return getDefaultStore().get(key);
 }
 
 export function set(key: string, value: string | null): void {
-  defaultStore.set(key, value);
+  getDefaultStore().set(key, value);
 }
 
 export function del(key: string): void {
-  defaultStore.del(key);
+  getDefaultStore().del(key);
 }
 
 export function has(key: string): boolean {
-  return defaultStore.has(key);
+  return getDefaultStore().has(key);
 }
 
 export function all(): Array<{ key: string; value: string | null }> {
-  return defaultStore.all();
+  return getDefaultStore().all();
 }
 
 export function close(): void {
-  defaultStore.close();
+  getDefaultStore().close();
+  defaultStore = null;
 }
-
-// Export the underlying database for advanced use cases
-export const db = defaultStore;

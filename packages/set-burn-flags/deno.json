@@ -1,10 +1,11 @@
 {
   "tasks": {
-    "dev": "deno run --allow-net --allow-read --allow-write --allow-env --allow-ffi --env main.ts",
-    "run": "deno run --allow-net --allow-read --allow-write --allow-env --allow-ffi --env main.ts",
+    "dev": "deno run --allow-net --allow-read --allow-write --allow-env --allow-ffi main.ts dev",
+    "run": "deno run --allow-net --allow-read --allow-write --allow-env --allow-ffi main.ts",
     "test": "deno test --allow-read --allow-write --allow-env --allow-ffi"
   },
   "imports": {
+    "@std/dotenv": "jsr:@std/dotenv@^0.225",
     "viem": "npm:viem@^2",
     "viem/chains": "npm:viem@^2/chains",
     "viem/accounts": "npm:viem@^2/accounts",
