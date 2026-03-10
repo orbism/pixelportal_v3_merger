@@ -386,6 +386,13 @@ export class OwnTheDogeContractService implements OnModuleInit {
     }
   }
 
+  async resetSyncCursor(): Promise<void> {
+    await this.prisma.syncState.deleteMany({
+      where: { key: 'pixel_transfers_sync' },
+    });
+    this.logger.log('Sync cursor reset — next sync will start from deployment block');
+  }
+
   async getSyncCursor(): Promise<number | null> {
     try {
       const state = await this.prisma.syncState.findUnique({

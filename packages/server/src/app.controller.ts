@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   Inject,
@@ -495,5 +496,14 @@ export class AppController {
     } catch (error) {
       throw new BadRequestException(error.message);
     }
+  }
+
+  @Delete('admin/sync-cursor')
+  async resetSyncCursor(@Headers('x-admin-secret') secret: string) {
+    if (secret !== this.configService.get('cronSecret')) {
+      throw new UnauthorizedException('Invalid admin secret');
+    }
+    await this.pixels.resetSyncCursor();
+    return { success: true, message: 'Sync cursor cleared — next sync will start from deployment block' };
   }
 }
