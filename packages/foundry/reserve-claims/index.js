@@ -5,13 +5,9 @@ import dotenv from 'dotenv'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
-// Load .env from parent directory
-dotenv.config({ path: resolve(import.meta.dirname, '../.env') })
-
 const RPC_URL = process.env.RPC_URL
 const PRIVATE_KEY = process.env.PRIVATE_KEY
 const PROXY_ADDRESS = process.env.PROXY_ADDRESS
-
 // Parse command line arguments
 const args = process.argv.slice(2)
 if (args.length < 1) {
@@ -31,7 +27,7 @@ if (isNaN(batchSize) || batchSize < 2 || batchSize > 100) {
 
 // Validate environment
 if (!RPC_URL || !PRIVATE_KEY || !PROXY_ADDRESS) {
-  console.error('Missing required environment variables in .env:')
+  console.error('Missing required environment variables:')
   console.error('  RPC_URL:', RPC_URL ? 'set' : 'MISSING')
   console.error('  PRIVATE_KEY:', PRIVATE_KEY ? 'set' : 'MISSING')
   console.error('  PROXY_ADDRESS:', PROXY_ADDRESS ? 'set' : 'MISSING')
@@ -64,6 +60,27 @@ for (let i = 0; i < snapshot.length; i++) {
     process.exit(1)
   }
 }
+
+// Check for duplicate token IDs across networks
+const seenTokenIds = new Map()
+const duplicates = []
+for (const entry of snapshot) {
+  const existing = seenTokenIds.get(entry.id)
+  if (existing) {
+    duplicates.push({ id: entry.id, network1: existing.network, address1: existing.address, network2: entry.network, address2: entry.address })
+  } else {
+    seenTokenIds.set(entry.id, { network: entry.network, address: entry.address })
+  }
+}
+
+if (duplicates.length > 0) {
+  console.error(`Error: Found ${duplicates.length} duplicate token ID(s) across networks:`)
+  for (const dup of duplicates) {
+    console.error(`  Token ${dup.id}: ${dup.network1} (${dup.address1}) vs ${dup.network2} (${dup.address2})`)
+  }
+  process.exit(1)
+}
+console.log(`Validated ${snapshot.length} entries, no duplicate token IDs`)
 
 // Contract ABI (only what we need)
 const abi = [
@@ -239,39 +256,28 @@ async function main() {
   console.log(`  Puppers remaining: ${puppersRemaining}`)
   console.log(`  Total supply: ${totalSupplyVal}`)
   console.log(`  Total reserved: ${totalReserved}`)
-  console.log(`  Available pool range: ${1000000n} to ${1000000n + puppersRemaining - 1n}`)
-
-  // Warn about potential gas issues
-  if (puppersRemaining > 100000n) {
-    console.log()
-    console.log('  WARNING: Large pool size detected!')
-    console.log('  The contract does a linear search through the pool which may run out of gas.')
-    console.log('  Consider processing tokens with IDs near INDEX_OFFSET first.')
-  }
+  const INDEX_OFFSET = 1000000n
+  const validRange = `${INDEX_OFFSET} to ${INDEX_OFFSET + totalSupplyVal - 1n}`
+  console.log(`  Valid token ID range: ${validRange}`)
+  console.log(`  Puppers remaining in pool: ${puppersRemaining}`)
   console.log()
 
-  // Check for tokens outside pool bounds (likely minted and burned on V1)
-  const INDEX_OFFSET = 1000000n
-  const poolUpperBound = INDEX_OFFSET + puppersRemaining - 1n
-  const outOfBoundsTokens = []
+  // Check for tokens outside valid range (must be within INDEX_OFFSET to INDEX_OFFSET + totalSupply - 1)
+  const outOfRangeTokens = []
 
   for (const entry of snapshot) {
     const tokenId = BigInt(entry.id)
-    if (tokenId > poolUpperBound) {
-      outOfBoundsTokens.push(entry.id)
+    if (tokenId < INDEX_OFFSET || tokenId >= INDEX_OFFSET + totalSupplyVal) {
+      outOfRangeTokens.push(entry.id)
     }
   }
 
-  if (outOfBoundsTokens.length > 0) {
-    console.error('ERROR: Snapshot contains tokens outside the current pool range!')
-    console.error(`  Pool range: ${INDEX_OFFSET} to ${poolUpperBound}`)
-    console.error(`  ${outOfBoundsTokens.length} token(s) exceed pool upper bound:`)
-    for (const id of outOfBoundsTokens) {
-      console.error(`    Token ${id}`)
+  if (outOfRangeTokens.length > 0) {
+    console.error(`ERROR: Snapshot contains ${outOfRangeTokens.length} token(s) outside valid range (${validRange}):`)
+    for (const id of outOfRangeTokens) {
+      console.error(`  Token ${id}`)
     }
     console.error()
-    console.error('These tokens were likely minted (and possibly burned) on V1 before the upgrade.')
-    console.error('They have been permanently removed from the pool and cannot be reserved.')
     console.error('Please remove these tokens from the snapshot and re-run.')
     process.exit(1)
   }
@@ -281,8 +287,10 @@ async function main() {
   const validEntries = []
   const skippedEntries = []
 
-  for (const entry of snapshot) {
+  for (let i = 0; i < snapshot.length; i++) {
+    const entry = snapshot[i]
     const tokenId = BigInt(entry.id)
+    console.log(`  [${i + 1}/${snapshot.length}] Token ${entry.id} (${entry.network}) -> ${entry.address}`)
 
     // Check if token already exists (minted)
     let exists = false
@@ -300,6 +308,7 @@ async function main() {
     }
 
     if (exists) {
+      console.log(`    SKIP: already minted`)
       skippedEntries.push({ ...entry, reason: 'already minted' })
       continue
     }
@@ -313,10 +322,12 @@ async function main() {
     })
 
     if (reserved) {
+      console.log(`    SKIP: already reserved`)
       skippedEntries.push({ ...entry, reason: 'already reserved' })
       continue
     }
 
+    console.log(`    OK: needs reservation`)
     validEntries.push(entry)
   }
 
@@ -371,43 +382,19 @@ async function main() {
 
           // Diagnostic: check the pool state for this token
           try {
-            const INDEX_OFFSET = 1000000n
-            const poolUpperBound = INDEX_OFFSET + puppersRemaining - 1n
-
-            // Check if token ID is beyond pool range
-            if (tid > poolUpperBound) {
-              console.error(`    DIAGNOSTIC: Token ID ${tid} > pool upper bound ${poolUpperBound}`)
-              console.error(`    This token is OUTSIDE the pool range and cannot be found by linear search`)
-
-              // Check what's stored at the token's natural index
-              const valueAtNaturalIndex = await publicClient.readContract({
-                address: PROXY_ADDRESS,
-                abi,
-                functionName: 'indexToPupper',
-                args: [tid]
-              })
-              console.error(`    indexToPupper[${tid}] = ${valueAtNaturalIndex} (0 = MAGIC_NULL means token ${tid} was here)`)
-
-              // Check pupperToIndex for this token
-              const indexForToken = await publicClient.readContract({
-                address: PROXY_ADDRESS,
-                abi,
-                functionName: 'pupperToIndex',
-                args: [tid]
-              })
-              console.error(`    pupperToIndex[${tid}] = ${indexForToken}`)
-
-              if (indexForToken > 0n && indexForToken < poolUpperBound) {
-                // Token might have been moved to a different index
-                const valueAtMovedIndex = await publicClient.readContract({
-                  address: PROXY_ADDRESS,
-                  abi,
-                  functionName: 'indexToPupper',
-                  args: [indexForToken]
-                })
-                console.error(`    indexToPupper[${indexForToken}] = ${valueAtMovedIndex}`)
-              }
-            }
+            const tokenIndex = await publicClient.readContract({
+              address: PROXY_ADDRESS,
+              abi,
+              functionName: 'pupperToIndex',
+              args: [tid]
+            })
+            const tokenAtIndex = await publicClient.readContract({
+              address: PROXY_ADDRESS,
+              abi,
+              functionName: 'indexToPupper',
+              args: [tid]
+            })
+            console.error(`    DIAGNOSTIC: pupperToIndex[${tid}] = ${tokenIndex}, indexToPupper[${tid}] = ${tokenAtIndex}`)
           } catch (diagErr) {
             console.error(`    Diagnostic error:`, diagErr.message)
           }
