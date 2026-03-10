@@ -22,30 +22,22 @@ import envConfig from "./environment/config";
 
 // Build chain configuration from environment
 const buildTargetChain = (): Chain => {
-  // Start with foundry as base for local chains
-  const baseChain = envConfig.chain.id === 1337 || envConfig.chain.id === 31337 
-    ? { ...foundry } 
-    : {};
+  // Use official wagmi chain objects for known chains so RainbowKit can
+  // identify them and prompt the wallet to switch networks correctly.
+  if (envConfig.chain.id === 8453) return base;
+  if (envConfig.chain.id === 84532) return baseSepolia;
 
+  // Local Anvil / custom chain fallback
   return {
-    ...baseChain,
+    ...foundry,
     id: envConfig.chain.id,
     name: envConfig.chain.name,
     network: envConfig.chain.name.toLowerCase().replace(/\s+/g, '-'),
-    nativeCurrency: {
-      name: 'Ether',
-      symbol: 'ETH',
-      decimals: 18,
-    },
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
     rpcUrls: {
       default: { http: [envConfig.chain.rpcUrl] },
       public: { http: [envConfig.chain.rpcUrl] },
     },
-    blockExplorers: envConfig.chain.id === 8453 
-      ? { default: { name: 'BaseScan', url: 'https://basescan.org' } }
-      : envConfig.chain.id === 84532
-      ? { default: { name: 'BaseScan', url: 'https://sepolia.basescan.org' } }
-      : undefined,
   } as Chain;
 };
 
