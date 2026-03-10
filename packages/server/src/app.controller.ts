@@ -503,7 +503,7 @@ export class AppController {
     if (secret !== this.configService.get('cronSecret')) {
       throw new UnauthorizedException('Invalid admin secret');
     }
-    await this.pixels.resetSyncCursor();
-    return { success: true, message: 'Sync cursor cleared — next sync will start from deployment block' };
+    const { deploymentBlock } = await this.pixels.resetSyncCursor();
+    return { success: true, message: `Sync cursor set to block ${deploymentBlock - 1} — next sync will start from ${deploymentBlock}` };
   }
 }

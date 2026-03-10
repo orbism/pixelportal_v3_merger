@@ -386,11 +386,18 @@ export class OwnTheDogeContractService implements OnModuleInit {
     }
   }
 
-  async resetSyncCursor(): Promise<void> {
-    await this.prisma.syncState.deleteMany({
+  async resetSyncCursor(): Promise<{ deploymentBlock: number }> {
+    const deploymentBlock = this.configService.get('pixelContractDeploymentBlockNumber');
+    // Set cursor to deploymentBlock - 1 so next sync starts exactly at deploymentBlock.
+    // Deleting the cursor is not enough: syncRecentTransfers falls back to
+    // getMostRecentTransferBlockNumber() from the PixelTransfers table, which overrides it.
+    await this.prisma.syncState.upsert({
       where: { key: 'pixel_transfers_sync' },
+      create: { key: 'pixel_transfers_sync', lastSyncedBlock: deploymentBlock - 1 },
+      update: { lastSyncedBlock: deploymentBlock - 1 },
     });
-    this.logger.log('Sync cursor reset — next sync will start from deployment block');
+    this.logger.log(`Sync cursor pinned to ${deploymentBlock - 1} — next sync will start from deployment block ${deploymentBlock}`);
+    return { deploymentBlock };
   }
 
   async getSyncCursor(): Promise<number | null> {
