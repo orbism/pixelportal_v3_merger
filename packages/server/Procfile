@@ -1,1 +1,1 @@
-  web: yarn start:migrate:prod                                                                                                     
+ web: node_modules/.bin/prisma generate && node_modules/.bin/prisma migrate deploy && node dist/main
