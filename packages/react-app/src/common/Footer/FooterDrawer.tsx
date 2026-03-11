@@ -88,14 +88,14 @@ const FooterDrawer = observer(() => {
                   <FooterItem title={"$DOG"} items={tradeLinks} />
                 </Grid>
               </Box>
-              <HStack pt={4} pb={2} spacing={3} flexWrap="wrap">
-                <Button size="xs" onClick={() => { AppStore.guide.startGuide(); setIsOpen(false); }}>
+              <HStack pt={4} pb={2} spacing={6} flexWrap="wrap">
+                <Button size="xs" px={4} py={2} onClick={() => { AppStore.guide.startGuide(); setIsOpen(false); }}>
                   Run Interactive User Guide
                 </Button>
-                <Button size="xs" onClick={() => { setIsBugReportOpen(true); setIsOpen(false); }}>
+                <Button size="xs" px={4} py={2} onClick={() => { setIsBugReportOpen(true); setIsOpen(false); }}>
                   Find a bug?!
                 </Button>
-                <Button size="xs" onClick={() => { setIsCreditsOpen(true); setIsOpen(false); }}>
+                <Button size="xs" px={4} py={2} onClick={() => { setIsCreditsOpen(true); setIsOpen(false); }}>
                   Credits
                 </Button>
               </HStack>
