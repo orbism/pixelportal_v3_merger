@@ -624,6 +624,20 @@ class ClaimPixelsDialogStore extends Reactionable(
         log("claim: approve tx submitted:", approveTx.hash);
         await approveTx.wait();
         log("claim: approve tx confirmed");
+
+        // Re-verify allowance before proceeding — guards against stale nonce on Base
+        // (fast blocks mean the node may not have indexed the approval block yet)
+        let verifiedAllowance = BigNumber.from(0);
+        for (let attempt = 1; attempt <= 5; attempt++) {
+          await new Promise(r => setTimeout(r, 1000));
+          verifiedAllowance = await AppStore.web3.getPxDogSpendAllowance();
+          log(`claim: allowance check attempt ${attempt}/5: ${ethers.utils.formatEther(verifiedAllowance)}`);
+          if (verifiedAllowance.gte(totalNeeded)) break;
+        }
+        if (verifiedAllowance.lt(totalNeeded)) {
+          throw new Error("DOG approval not reflected on-chain after retries — please try again");
+        }
+        log("claim: allowance verified, proceeding to claim");
       } else {
         log("claim: DOG already approved, skipping approval step");
       }
