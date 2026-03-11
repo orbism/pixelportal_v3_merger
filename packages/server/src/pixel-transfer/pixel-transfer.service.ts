@@ -2,6 +2,7 @@ import { EventLog } from 'ethers';
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { ethers } from 'ethers';
 import { EthersService } from '../ethers/ethers.service';
 import { Events, PixelTransferEventPayload } from '../events';
@@ -89,6 +90,17 @@ export class PixelTransferService {
     // https://ethereum.stackexchange.com/questions/55155/contract-event-transactionindex-and-logindex
     const { blockHash, transactionHash, index } = event;
     return `${blockHash}:${transactionHash}:${index}`;
+  }
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async syncPixelTransfersCron() {
+    this.logger.log('cron: syncPixelTransfers starting');
+    try {
+      await this.syncRecentTransfers();
+      this.logger.log('cron: syncPixelTransfers complete');
+    } catch (err: any) {
+      this.logger.error(`cron: syncPixelTransfers failed: ${err.message}`);
+    }
   }
 
   async syncRecentTransfers() {
