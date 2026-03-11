@@ -109,7 +109,8 @@ const ButtonStyle = {
   sizes: {
     xs: {
       button: {
-        p: "0px",
+        p: "10px",
+        fontSize: "12px",
       },
     },
     sm: {
