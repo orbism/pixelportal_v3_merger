@@ -37,6 +37,8 @@ export class OwnTheDogeContractService implements OnModuleInit {
   private cachedDimensions: { width: string; height: string } | null = null;
   private dimensionsFetchPromise: Promise<{ width: string; height: string }> | null = null;
   private lastProcessedBlock: number | null = null;
+  private isInitializing = false;
+  private pixelPollIntervalId: NodeJS.Timeout | null = null;
 
   constructor(
     @Inject(forwardRef(() => PixelTransferService))
@@ -59,13 +61,21 @@ export class OwnTheDogeContractService implements OnModuleInit {
 
   @OnEvent(Events.ETHERS_WS_PROVIDER_CONNECTED)
   async handleProviderConnected(provider: WebSocketProvider) {
-    if (this.isConnectedToContracts) {
-      this.logger.log('Contracts already initialized, skipping duplicate event');
+    if (this.isInitializing) {
+      this.logger.log('Already initializing, skipping concurrent event');
       return;
     }
-    this.onProviderConnected(provider).catch((error) => {
-      this.logger.error(`onProviderConnected failed: ${error.message}`);
-    });
+    this.isInitializing = true;
+    // Null contracts so stale references can't block re-initialization
+    this.pxContract = null;
+    this.dogContract = null;
+    this.onProviderConnected(provider)
+      .catch((error) => {
+        this.logger.error(`onProviderConnected failed: ${error.message}`);
+      })
+      .finally(() => {
+        this.isInitializing = false;
+      });
   }
 
   get isConnectedToContracts() {
@@ -280,9 +290,13 @@ export class OwnTheDogeContractService implements OnModuleInit {
       }
     };
 
+    // Clear any existing interval before starting a new one (prevents leak on reconnect)
+    if (this.pixelPollIntervalId) {
+      clearInterval(this.pixelPollIntervalId);
+    }
     // Run once on startup, then every 5 minutes
     poll();
-    setInterval(poll, POLL_INTERVAL_MS);
+    this.pixelPollIntervalId = setInterval(poll, POLL_INTERVAL_MS);
   }
 
   async getAllPixelTransferLogs() {

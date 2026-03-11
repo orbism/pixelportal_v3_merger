@@ -126,15 +126,14 @@ export class EthersService implements OnModuleInit {
     let pingTimeout: any;
     let keepAliveInterval: any;
 
-    provider.websocket.on('open', () => {
-      keepAliveInterval = setInterval(() => {
-        provider.websocket.ping();
+    // Connection already open — start immediately
+    keepAliveInterval = setInterval(() => {
+      provider.websocket.ping();
 
-        pingTimeout = setTimeout(() => {
-          provider.websocket.terminate();
-        }, expectedPongBack);
-      }, checkInterval);
-    });
+      pingTimeout = setTimeout(() => {
+        provider.websocket.terminate();
+      }, expectedPongBack);
+    }, checkInterval);
 
     provider.websocket.on('close', (err) => {
       const logMessage = 'Websocket connection closed';
