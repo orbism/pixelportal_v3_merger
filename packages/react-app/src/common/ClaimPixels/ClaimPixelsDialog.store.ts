@@ -702,8 +702,12 @@ class ClaimPixelsDialogStore extends Reactionable(
       runInAction(() => {
         this.claimedPixels = claimedIds;
       });
-      await AppStore.web3.refreshPixelOwnershipMap();
-      await AppStore.web3.refreshPupperBalance();
+      try {
+        await AppStore.web3.refreshPixelOwnershipMap();
+        await AppStore.web3.refreshPupperBalance();
+      } catch (refreshErr: any) {
+        err("claim: post-claim refresh failed (non-fatal):", refreshErr.message);
+      }
       this.destroyNavigation();
       this.pushNavigation(ClaimPixelsModalView.Complete);
       showSuccessToast(`Successfully claimed ${claimedIds.length} pixel(s)!`);

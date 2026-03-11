@@ -71,7 +71,10 @@ export class AppController {
 
   @Get('config/refresh')
   async getConfigRefreshed() {
-    await this.pixelTransferService.syncRecentTransfers();
+    // Fire sync in background — don't block response on a potentially slow sync
+    this.pixelTransferService.syncRecentTransfers().catch((err) =>
+      this.logger.error(`syncRecentTransfers background error: ${err.message}`),
+    );
     return this.pixelTransferService.getBalances();
   }
 
