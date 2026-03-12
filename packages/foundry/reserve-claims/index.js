@@ -11,14 +11,17 @@ const PROXY_ADDRESS = process.env.PROXY_ADDRESS
 // Parse command line arguments
 const args = process.argv.slice(2)
 if (args.length < 1) {
-  console.error('Usage: node index.js <snapshot-file> [batch-size]')
+  console.error('Usage: node index.js <snapshot-file> [batch-size] [--skip-precheck]')
   console.error('  snapshot-file: JSON file with array of {address, id} objects')
   console.error('  batch-size: Number of reservations per transaction (2-100, default: 10)')
+  console.error('  --skip-precheck: Skip per-token ownerOf/isReserved checks before batching')
   process.exit(1)
 }
 
-const snapshotFile = args[0]
-const batchSize = args[1] ? parseInt(args[1], 10) : 10
+const skipPrecheck = args.includes('--skip-precheck')
+const positionalArgs = args.filter(a => a !== '--skip-precheck')
+const snapshotFile = positionalArgs[0]
+const batchSize = positionalArgs[1] ? parseInt(positionalArgs[1], 10) : 10
 
 if (isNaN(batchSize) || batchSize < 2 || batchSize > 100) {
   console.error('Error: batch-size must be between 2 and 100')
@@ -283,61 +286,67 @@ async function main() {
   }
 
   // Pre-check all tokens to filter out already reserved or existing ones
-  console.log('Pre-checking token status...')
   const validEntries = []
   const skippedEntries = []
 
-  for (let i = 0; i < snapshot.length; i++) {
-    const entry = snapshot[i]
-    const tokenId = BigInt(entry.id)
-    console.log(`  [${i + 1}/${snapshot.length}] Token ${entry.id} (${entry.network}) -> ${entry.address}`)
+  if (skipPrecheck) {
+    console.log('Skipping pre-check, submitting all snapshot entries...')
+    validEntries.push(...snapshot)
+  } else {
+    console.log('Pre-checking token status...')
 
-    // Check if token already exists (minted)
-    let exists = false
-    try {
-      await publicClient.readContract({
+    for (let i = 0; i < snapshot.length; i++) {
+      const entry = snapshot[i]
+      const tokenId = BigInt(entry.id)
+      console.log(`  [${i + 1}/${snapshot.length}] Token ${entry.id} (${entry.network}) -> ${entry.address}`)
+
+      // Check if token already exists (minted)
+      let exists = false
+      try {
+        await publicClient.readContract({
+          address: PROXY_ADDRESS,
+          abi,
+          functionName: 'ownerOf',
+          args: [tokenId]
+        })
+        exists = true
+      } catch {
+        // ownerOf reverts if token doesn't exist, which is expected
+        exists = false
+      }
+
+      if (exists) {
+        console.log(`    SKIP: already minted`)
+        skippedEntries.push({ ...entry, reason: 'already minted' })
+        continue
+      }
+
+      // Check if token is already reserved
+      const reserved = await publicClient.readContract({
         address: PROXY_ADDRESS,
         abi,
-        functionName: 'ownerOf',
+        functionName: 'isReserved',
         args: [tokenId]
       })
-      exists = true
-    } catch {
-      // ownerOf reverts if token doesn't exist, which is expected
-      exists = false
+
+      if (reserved) {
+        console.log(`    SKIP: already reserved`)
+        skippedEntries.push({ ...entry, reason: 'already reserved' })
+        continue
+      }
+
+      console.log(`    OK: needs reservation`)
+      validEntries.push(entry)
     }
 
-    if (exists) {
-      console.log(`    SKIP: already minted`)
-      skippedEntries.push({ ...entry, reason: 'already minted' })
-      continue
-    }
+    console.log(`  Valid tokens to reserve: ${validEntries.length}`)
+    console.log(`  Skipped tokens: ${skippedEntries.length}`)
 
-    // Check if token is already reserved
-    const reserved = await publicClient.readContract({
-      address: PROXY_ADDRESS,
-      abi,
-      functionName: 'isReserved',
-      args: [tokenId]
-    })
-
-    if (reserved) {
-      console.log(`    SKIP: already reserved`)
-      skippedEntries.push({ ...entry, reason: 'already reserved' })
-      continue
-    }
-
-    console.log(`    OK: needs reservation`)
-    validEntries.push(entry)
-  }
-
-  console.log(`  Valid tokens to reserve: ${validEntries.length}`)
-  console.log(`  Skipped tokens: ${skippedEntries.length}`)
-
-  if (skippedEntries.length > 0) {
-    console.log('  Skipped details:')
-    for (const entry of skippedEntries) {
-      console.log(`    Token ${entry.id}: ${entry.reason}`)
+    if (skippedEntries.length > 0) {
+      console.log('  Skipped details:')
+      for (const entry of skippedEntries) {
+        console.log(`    Token ${entry.id}: ${entry.reason}`)
+      }
     }
   }
   console.log()

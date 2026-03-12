@@ -27,7 +27,7 @@ contract DeployPXV3UUPS is Script {
     address constant NICK_FACTORY = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
 
     // INCREMENT WHEN YOU WANT TO CHANGE THE DEPLOY ADDRESS
-    bytes32 salt = keccak256("PXV3_UUPS_v1");
+    bytes32 salt = keccak256("PXV3_UUPS_v2");
 
     function run() external {
         // Verify environment is properly configured
