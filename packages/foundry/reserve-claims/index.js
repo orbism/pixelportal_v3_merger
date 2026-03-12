@@ -365,7 +365,7 @@ async function main() {
 
     console.log(`Batch ${batchNum + 1}/${totalBatches}: reserving tokens ${start + 1}-${end} (${batch.length} tokens)`)
 
-    try {
+    const attemptBatch = async () => {
       // First try to simulate each token individually to find the failing one
       for (let j = 0; j < tokenIds.length; j++) {
         try {
@@ -419,43 +419,35 @@ async function main() {
 
       console.log(`  Transaction sent: ${hash}`)
 
-      // Wait for confirmation
       const receipt = await publicClient.waitForTransactionReceipt({ hash })
 
       if (receipt.status === 'success') {
         console.log(`  Confirmed in block ${receipt.blockNumber}`)
-        successCount += batch.length
+        return batch.length
       } else {
-        console.error(`  Transaction reverted!`)
-        failCount += batch.length
+        throw new Error('Transaction reverted on-chain')
       }
-    } catch (err) {
-      // Try to extract detailed error info from viem
-      console.error(`  Error: ${err.shortMessage || err.message}`)
+    }
 
-      // Walk the error chain to find ContractFunctionRevertedError
+    const logError = (err, label) => {
+      console.error(`  ${label}: ${err.shortMessage || err.message}`)
       let revertError = null
       if (err.walk) {
         revertError = err.walk(e => e.name === 'ContractFunctionRevertedError')
       }
-
       if (revertError?.data?.errorName) {
         console.error(`  Revert reason: ${revertError.data.errorName}`)
         if (revertError.data.args && revertError.data.args.length > 0) {
           console.error(`  Error args: ${JSON.stringify(revertError.data.args)}`)
         }
       } else if (err.cause?.reason) {
-        // For require() with string messages
         console.error(`  Revert reason: ${err.cause.reason}`)
       } else {
-        // Show raw revert data if available (for manual decoding)
         const revertData = revertError?.signature || err.data?.data || err.cause?.data
         if (revertData && typeof revertData === 'string' && revertData.startsWith('0x')) {
           console.error(`  Raw revert data: ${revertData}`)
         }
       }
-
-      // Additional debug: dump the full error structure
       console.error(`  Debug - Error name: ${err.name}`)
       if (err.cause) {
         console.error(`  Debug - Cause name: ${err.cause.name}`)
@@ -464,8 +456,21 @@ async function main() {
       if (err.metaMessages) {
         console.error(`  Debug - Meta messages: ${err.metaMessages.join(', ')}`)
       }
+    }
 
-      failCount += batch.length
+    try {
+      successCount += await attemptBatch()
+    } catch (err) {
+      logError(err, 'Error (attempt 1/2)')
+      console.log('  Retrying in 5s...')
+      await new Promise(resolve => setTimeout(resolve, 5000))
+      try {
+        successCount += await attemptBatch()
+        console.log('  Retry succeeded')
+      } catch (retryErr) {
+        logError(retryErr, 'Error (attempt 2/2)')
+        failCount += batch.length
+      }
     }
 
     console.log()
