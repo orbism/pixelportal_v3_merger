@@ -2,6 +2,9 @@
 
 A decentralized pixel art platform enabling fractional ownership of "The Doge NFT" through individual pixel tokens on Base L2.
 
+Original code (v1): gainor
+v3 refactor: orbism @ moon
+
 ## Project Overview
 
 The Doge Pixel Portal allows users to own, trade, and interact with individual pixels from the iconic Doge NFT image. Each pixel is represented as an ERC721 token (PX) that can be minted by locking DOG20 tokens. The project consists of smart contracts, a backend indexer/API, and a React-based frontend.
@@ -653,4 +656,3 @@ MIT License - see LICENSE file for details
 - [NestJS Documentation](https://docs.nestjs.com/)
 - [Wagmi Documentation](https://wagmi.sh/)
 - [Basenames Documentation](https://www.base.org/names)
-
