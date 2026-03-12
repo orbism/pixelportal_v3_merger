@@ -2322,7 +2322,7 @@
       "chainId": "8453",
       "contracts": {
         "PX": {
-          "address": "0x2B988472B7Ca9A3B5F13D408E9Aef8ed6167150B",
+          "address": "0x99D1afb4bf77E08aE08371F26f66A28197C7e40f",
           "abi": [
             {
               "type": "constructor",
