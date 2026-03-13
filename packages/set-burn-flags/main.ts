@@ -35,22 +35,6 @@ const dbPath = new URL(`./priv/${envName}-store.db`, import.meta.url).pathname;
 initDb(dbPath);
 console.log(`Environment: ${envName}, DB: ${envName}-store.db`);
 
-// Initialize V3 contract module
-const V3_PRIVATE_KEY = Deno.env.get("PRIVATE_KEY");
-if (!V3_PRIVATE_KEY) {
-  throw new Error("Missing env var: PRIVATE_KEY");
-}
-initV3({
-  chain: getChain("V3_CHAIN"),
-  contractAddress: Deno.env.get("V3_CONTRACT_ADDRESS") as Address,
-  rpcEndpoint: Deno.env.get("V3_HTTP_RPC_ENDPOINT")!,
-  privateKey: V3_PRIVATE_KEY,
-});
-
-// Track unsubscribe functions for graceful shutdown
-const unsubscribers: Array<() => void> = [];
-let isShuttingDown = false;
-
 // Map chain names from env to viem chain objects
 const chainMap: Record<string, Chain> = {
   "mainnet": mainnet,
@@ -70,6 +54,22 @@ function getChain(envVar: string): Chain {
   }
   return chain;
 }
+
+// Initialize V3 contract module
+const V3_PRIVATE_KEY = Deno.env.get("PRIVATE_KEY");
+if (!V3_PRIVATE_KEY) {
+  throw new Error("Missing env var: PRIVATE_KEY");
+}
+initV3({
+  chain: getChain("V3_CHAIN"),
+  contractAddress: Deno.env.get("V3_CONTRACT_ADDRESS") as Address,
+  rpcEndpoint: Deno.env.get("V3_HTTP_RPC_ENDPOINT")!,
+  privateKey: V3_PRIVATE_KEY,
+});
+
+// Track unsubscribe functions for graceful shutdown
+const unsubscribers: Array<() => void> = [];
+let isShuttingDown = false;
 
 // Wrapped storage helpers that use the db module
 function getStoredBlock(key: string, defaultBlock: bigint): bigint {
