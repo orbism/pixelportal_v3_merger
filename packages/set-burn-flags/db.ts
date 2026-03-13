@@ -93,6 +93,7 @@ export function createInMemoryKVStore(): KVStore {
 
 // Lazily initialized default store
 let defaultStore: KVStore | null = null;
+let rawDb: Database | null = null;
 
 function getDefaultStore(): KVStore {
   if (!defaultStore) {
@@ -106,7 +107,54 @@ export function init(dbPath: string): void {
   if (defaultStore) {
     throw new Error("Database already initialized.");
   }
-  defaultStore = createKVStore(dbPath);
+  rawDb = new Database(dbPath);
+
+  // Initialize KV table
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS kv (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    )
+  `);
+
+  // Initialize failed burns table
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS failed_burns (
+      token_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      error TEXT,
+      failed_at TEXT NOT NULL,
+      PRIMARY KEY (token_id, label)
+    )
+  `);
+
+  // Wrap rawDb in a KVStore interface
+  const db = rawDb;
+  defaultStore = {
+    get(key: string): string | null {
+      const row = db.prepare("SELECT value FROM kv WHERE key = ?").get(key) as { value: string | null } | undefined;
+      return row?.value ?? null;
+    },
+    set(key: string, value: string | null): void {
+      db.prepare("INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)").run(key, value);
+    },
+    del(key: string): void {
+      db.prepare("DELETE FROM kv WHERE key = ?").run(key);
+    },
+    has(key: string): boolean {
+      const row = db.prepare("SELECT 1 FROM kv WHERE key = ?").get(key);
+      return row !== undefined;
+    },
+    all(): Array<{ key: string; value: string | null }> {
+      return db.prepare("SELECT key, value FROM kv").all() as Array<{ key: string; value: string | null }>;
+    },
+    clear(): void {
+      db.exec("DELETE FROM kv");
+    },
+    close(): void {
+      db.close();
+    },
+  };
 }
 
 // Export functions that use the default store
@@ -133,4 +181,24 @@ export function all(): Array<{ key: string; value: string | null }> {
 export function close(): void {
   getDefaultStore().close();
   defaultStore = null;
+  rawDb = null;
+}
+
+export interface FailedBurn {
+  token_id: string;
+  label: string;
+  error: string | null;
+  failed_at: string;
+}
+
+export function recordFailedBurn(tokenId: bigint, label: string, error: string): void {
+  if (!rawDb) throw new Error("Database not initialized.");
+  rawDb.prepare(
+    "INSERT OR REPLACE INTO failed_burns (token_id, label, error, failed_at) VALUES (?, ?, ?, ?)"
+  ).run(tokenId.toString(), label, error, new Date().toISOString());
+}
+
+export function getFailedBurns(): FailedBurn[] {
+  if (!rawDb) throw new Error("Database not initialized.");
+  return rawDb.prepare("SELECT token_id, label, error, failed_at FROM failed_burns ORDER BY failed_at").all() as FailedBurn[];
 }
