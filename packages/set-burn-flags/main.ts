@@ -223,8 +223,9 @@ function watchBlocks(chain: SourceChainConfig): void {
     onBlock: (block) => {
       try {
         if (isShuttingDown) return;
+        if (!block) return;
         const blockNumber = block.number;
-        if (blockNumber !== null) {
+        if (blockNumber !== null && blockNumber !== undefined) {
           const target = getStoredBlock(backfillTargetKey, 0n);
           const lastProcessed = getStoredBlock(lastProcessedKey, 0n);
           if (lastProcessed >= target && blockNumber > lastProcessed) {
