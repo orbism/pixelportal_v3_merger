@@ -315,10 +315,20 @@ class ClaimPixelsDialogStore extends Reactionable(
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.AlreadyClaimed);
         } else {
-          log("route: WaitingForConfirmation (burn pending on server)");
-          this.destroyNavigation();
-          this.pushNavigation(ClaimPixelsModalView.WaitingForConfirmation);
-          this.startPollingForBurnConfirmation();
+          // Guard: pending reservations may be stale V2 post-mint records (burnConfirmed reset to false
+          // by contract after minting). If no mainnet tokens are pending and V1 still needs burning,
+          // route to Overview so user can burn V1.
+          const mainnetInPending = this.pendingReservations.some(p =>
+            this.eligibility.mainnet.includes(p.tokenId)
+          );
+          if (this.mainnetPixelsToBurn.length > 0 && !mainnetInPending) {
+            log("route: Overview (V1 unburned, pending reservations are stale Base-only records)");
+          } else {
+            log("route: WaitingForConfirmation (burn pending on server)");
+            this.destroyNavigation();
+            this.pushNavigation(ClaimPixelsModalView.WaitingForConfirmation);
+            this.startPollingForBurnConfirmation();
+          }
         }
       } else {
         // Fallback A: server-indexed V3 ownership
@@ -593,7 +603,19 @@ class ClaimPixelsDialogStore extends Reactionable(
           this.pushNavigation(ClaimPixelsModalView.ReadyToClaim);
         }
       } else {
-        log(`poll #${this.pollCount}: not confirmed yet, still waiting`);
+        // Same stale-pending guard as init(): if V1 still needs burning and pending are Base-only,
+        // stop polling and route to Overview.
+        const mainnetInPending = this.pendingReservations.some(p =>
+          this.eligibility.mainnet.includes(p.tokenId)
+        );
+        if (this.mainnetPixelsToBurn.length > 0 && !mainnetInPending) {
+          this.stopPolling();
+          log("poll: V1 unburned, pending are stale Base-only — routing to Overview");
+          this.destroyNavigation();
+          this.pushNavigation(ClaimPixelsModalView.Overview);
+        } else {
+          log(`poll #${this.pollCount}: not confirmed yet, still waiting`);
+        }
       }
     } catch (error) {
       err("checkBurnConfirmation() failed:", error);
