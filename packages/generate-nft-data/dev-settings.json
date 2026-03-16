@@ -1,0 +1,27 @@
+{
+    "image": "/Users/user/vcs/int/pixel-portal-v3/THE_ACTUAL_NFT_IMAGE.png",
+    "indexOffset": 1000000,
+    "output": "/Users/user/vcs/int/pixel-portal-v3/packages/generate-nft-data/output",
+    "metadataTemplate": "/Users/user/vcs/int/pixel-portal-v3/packages/generate-nft-data/metadata-template.json",
+    "trait": {
+        "image": "/Users/user/vcs/int/pixel-portal-v3/packages/generate-nft-data/doge-traits.png",
+        "traits": {
+            "ffd673": "Wall",
+            "902510": "Couch",
+            "66ff00": "DOGE",
+            "c1c546": "Shade",
+            "745627": "Table",
+            "742727": "Plant",
+            "adac33": "Claw",
+            "096461": "Ear",
+            "00c0ff": "Smile",
+            "8a00ff": "Whiskers",
+            "ff9000": "Nose",
+            "fff600": "Hand",
+            "ffb7fc": "Picture",
+            "0600ff": "Stool",
+            "ff00c0": "Flower",
+            "ff0000": "Eyes"
+        }
+    }
+}

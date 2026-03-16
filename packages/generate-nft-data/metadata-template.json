@@ -1,0 +1,29 @@
+{
+  "name": "{name} ({x}, {y})",
+  "description": "{description} NFT at location ({x}, {y})",
+  "external_url": "{external_url_prefix}/{index}",
+  "image": "{image_url_prefix}/pixels_sh{shard}/{index}.{image_extension}",
+  "hex": "#{hex}",
+  "attributes": [
+    {
+      "trait_type": "Index",
+      "value": "{index}"
+    },
+    {
+      "trait_type": "X Coordinate",
+      "value": "{x}"
+    },
+    {
+      "trait_type": "Y Coordinate",
+      "value": "{y}"
+    },
+    {
+      "trait_type": "Hex",
+      "value": "#{hex}"
+    },
+    {
+        "trait_type": "Object",
+        "value": "{image_object}"
+    }
+  ]
+}
