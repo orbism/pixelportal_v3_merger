@@ -296,8 +296,8 @@ class ClaimPixelsDialogStore extends Reactionable(
         "| basePixelsToBurn:", this.basePixelsToBurn.length);
 
       if (this.claimablePixels.length > 0) {
-        if (this.basePixelsToBurn.length > 0) {
-          log("route: Overview (V2 burn still needed)");
+        if (this.mainnetPixelsToBurn.length > 0 || this.basePixelsToBurn.length > 0) {
+          log("route: Overview (V1 or V2 burn still needed)");
         } else {
           log("route: ReadyToClaim");
           this.destroyNavigation();
