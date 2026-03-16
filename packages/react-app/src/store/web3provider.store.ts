@@ -103,6 +103,10 @@ class Web3providerStore {
   async validateNetwork() {
     console.log("Validating network: Current ID", this.network?.id, "Expected ID", env.app.targetChainId);
     if (this.network?.id !== env.app.targetChainId) {
+      if (AppStore.web3.isIntentionalNetworkSwitch) {
+        console.log("Skipping network validation — intentional switch in progress");
+        return;
+      }
       showErrorToast(`Please connect to ${env.app.targetNetworkName.toLocaleUpperCase()}`);
       await this.disconnect();
     }

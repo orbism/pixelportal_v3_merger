@@ -50,6 +50,9 @@ class Web3Store extends Reactionable(Web3providerStore) {
   targetNetworkName = env.app.targetNetworkName;
 
   @observable
+  isIntentionalNetworkSwitch = false;
+
+  @observable
   dogBalance: BigNumber | null = null;
   @action
   setDogBalance(balance: BigNumber) {

@@ -462,18 +462,24 @@ class ClaimPixelsDialogStore extends Reactionable(
 
       if (currentChainId !== requiredChainId) {
         log(`Switching to chain ${requiredChainId}...`);
+        AppStore.web3.isIntentionalNetworkSwitch = true;
         const switched = await AppStore.web3.switchNetwork(requiredChainId);
         if (!switched) {
+          AppStore.web3.isIntentionalNetworkSwitch = false;
           throw new Error(`Please switch to ${AppStore.web3.getNetworkDisplayName(requiredChainId)}`);
         }
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
       let tx: ethers.ContractTransaction;
-      if (network === "mainnet") {
-        tx = await AppStore.web3.burnV1Pixels(tokenIds);
-      } else {
-        tx = await AppStore.web3.burnV2Pixels(tokenIds);
+      try {
+        if (network === "mainnet") {
+          tx = await AppStore.web3.burnV1Pixels(tokenIds);
+        } else {
+          tx = await AppStore.web3.burnV2Pixels(tokenIds);
+        }
+      } finally {
+        AppStore.web3.isIntentionalNetworkSwitch = false;
       }
 
       log("Burn tx submitted:", tx.hash);
@@ -566,8 +572,8 @@ class ClaimPixelsDialogStore extends Reactionable(
 
       if (this.claimablePixels.length > 0) {
         this.stopPolling();
-        if (this.basePixelsToBurn.length > 0) {
-          log("poll: burn confirmed but V2 still needed routing to Overview");
+        if (this.mainnetPixelsToBurn.length > 0 || this.basePixelsToBurn.length > 0) {
+          log("poll: burn confirmed but pixels still unburned on other network — routing to Overview");
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.Overview);
         } else {
