@@ -290,6 +290,46 @@ class ClaimPixelsDialogStore extends Reactionable(
         warn("Could not load claimable pixels (OK if none reserved yet):", error);
       }
 
+      // Reconcile burn state with V3 on-chain ownership.
+      // Pending reservations with burnConfirmed=false may be stale post-mint records (the contract
+      // resets burnConfirmed after minting). If the pending token is already owned on V3, it was
+      // burned+claimed — update burnedBase/burnedMainnet so Overview displays it correctly,
+      // and so routing can trust the burn-state arrays.
+      const ownedOnV3 = new Set(AppStore.web3.puppersOwned);
+
+      // Fallback: if server index hasn't populated puppersOwned yet, check the contract directly
+      // for the subset of tokens in pendingReservations (cheap — only the pending IDs)
+      if (ownedOnV3.size === 0 && this.pendingReservations.length > 0 && AppStore.web3.address) {
+        try {
+          const pendingIds = this.pendingReservations.map(p => p.tokenId);
+          const directOwned = await AppStore.web3.getOwnedEligibleV3Tokens(pendingIds, AppStore.web3.address);
+          for (const id of directOwned) ownedOnV3.add(id);
+        } catch (e) {
+          warn("Could not check V3 contract ownership for pending tokens:", e);
+        }
+      }
+
+      const newBurnedBase = [...this.burnedBase];
+      const newBurnedMainnet = [...this.burnedMainnet];
+      for (const p of this.pendingReservations) {
+        if (ownedOnV3.has(p.tokenId)) {
+          if (this.eligibility.base.includes(p.tokenId) && !newBurnedBase.includes(p.tokenId)) {
+            newBurnedBase.push(p.tokenId);
+          }
+          if (this.eligibility.mainnet.includes(p.tokenId) && !newBurnedMainnet.includes(p.tokenId)) {
+            newBurnedMainnet.push(p.tokenId);
+          }
+        }
+      }
+      if (newBurnedBase.length !== this.burnedBase.length || newBurnedMainnet.length !== this.burnedMainnet.length) {
+        runInAction(() => {
+          this.burnedBase = newBurnedBase;
+          this.burnedMainnet = newBurnedMainnet;
+        });
+        log("Inferred burned tokens from V3 ownership:", { newBurnedBase, newBurnedMainnet });
+        this.saveToStorage();
+      }
+
       // Smart routing decision
       log("Routing decision claimable:", this.claimablePixels.length,
         "| pending:", this.pendingReservations.length,
@@ -306,8 +346,8 @@ class ClaimPixelsDialogStore extends Reactionable(
       } else if (this.pendingReservations.length > 0 && (this.burnedMainnet.length > 0 || this.burnedBase.length > 0)) {
         // Guard: contract retains stale reservation records after minting — check claim
         // flags before trusting pendingReservations as evidence that claim hasn't happened.
+        // (ownedOnV3 already computed above with contract fallback)
         const allEligible = [...this.eligibility.mainnet, ...this.eligibility.base];
-        const ownedOnV3 = new Set(AppStore.web3.puppersOwned);
         const serverClaimed = allEligible.length > 0 && allEligible.every(id => ownedOnV3.has(id));
 
         if (serverClaimed) {
@@ -315,16 +355,23 @@ class ClaimPixelsDialogStore extends Reactionable(
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.AlreadyClaimed);
         } else {
-          // Guard: pending reservations may be stale V2 post-mint records (burnConfirmed reset to false
-          // by contract after minting). If no mainnet tokens are pending and V1 still needs burning,
-          // route to Overview so user can burn V1.
-          const mainnetInPending = this.pendingReservations.some(p =>
-            this.eligibility.mainnet.includes(p.tokenId)
-          );
-          if (this.mainnetPixelsToBurn.length > 0 && !mainnetInPending) {
-            log("route: Overview (V1 unburned, pending reservations are stale Base-only records)");
+          // Check if ALL pending reservation tokens are already owned on V3.
+          // If so, they are stale post-mint records (contract resets burnConfirmed=false after
+          // minting) — not evidence of a pending sweep. Use ground-truth V3 ownership.
+          const pendingTokenIds = this.pendingReservations.map(p => p.tokenId);
+          const allPendingAreStale = pendingTokenIds.length > 0 &&
+            pendingTokenIds.every(id => ownedOnV3.has(id));
+
+          if (allPendingAreStale && (this.mainnetPixelsToBurn.length > 0 || this.basePixelsToBurn.length > 0)) {
+            log("route: Overview (all pending records are stale, tokens remain to burn on other network)");
+            this.destroyNavigation();
+            this.pushNavigation(ClaimPixelsModalView.Overview);
+          } else if (allPendingAreStale) {
+            log("route: AlreadyClaimed (all pending records stale, all eligible burned)");
+            this.destroyNavigation();
+            this.pushNavigation(ClaimPixelsModalView.AlreadyClaimed);
           } else {
-            log("route: WaitingForConfirmation (burn pending on server)");
+            log("route: WaitingForConfirmation (burn genuinely pending on server)");
             this.destroyNavigation();
             this.pushNavigation(ClaimPixelsModalView.WaitingForConfirmation);
             this.startPollingForBurnConfirmation();
@@ -603,14 +650,16 @@ class ClaimPixelsDialogStore extends Reactionable(
           this.pushNavigation(ClaimPixelsModalView.ReadyToClaim);
         }
       } else {
-        // Same stale-pending guard as init(): if V1 still needs burning and pending are Base-only,
-        // stop polling and route to Overview.
-        const mainnetInPending = this.pendingReservations.some(p =>
-          this.eligibility.mainnet.includes(p.tokenId)
-        );
-        if (this.mainnetPixelsToBurn.length > 0 && !mainnetInPending) {
+        // Guard: pending reservations may be stale post-mint records (burnConfirmed reset to false
+        // by contract after minting). Check V3 ownership as ground truth.
+        const pendingTokenIds = this.pendingReservations.map(p => p.tokenId);
+        const ownedOnV3 = new Set(AppStore.web3.puppersOwned);
+        const allPendingAreStale = pendingTokenIds.length > 0 &&
+          pendingTokenIds.every(id => ownedOnV3.has(id));
+
+        if (allPendingAreStale && (this.mainnetPixelsToBurn.length > 0 || this.basePixelsToBurn.length > 0)) {
           this.stopPolling();
-          log("poll: V1 unburned, pending are stale Base-only — routing to Overview");
+          log("poll: all pending records stale, tokens remain to burn — routing to Overview");
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.Overview);
         } else {
