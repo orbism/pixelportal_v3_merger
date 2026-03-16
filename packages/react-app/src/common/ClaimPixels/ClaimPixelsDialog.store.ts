@@ -306,14 +306,12 @@ class ClaimPixelsDialogStore extends Reactionable(
       } else if (this.pendingReservations.length > 0 && (this.burnedMainnet.length > 0 || this.burnedBase.length > 0)) {
         // Guard: contract retains stale reservation records after minting — check claim
         // flags before trusting pendingReservations as evidence that claim hasn't happened.
-        const localClaimed = stored?.claimed === true;
         const allEligible = [...this.eligibility.mainnet, ...this.eligibility.base];
         const ownedOnV3 = new Set(AppStore.web3.puppersOwned);
         const serverClaimed = allEligible.length > 0 && allEligible.every(id => ownedOnV3.has(id));
 
-        if (localClaimed || serverClaimed) {
-          log("route: AlreadyClaimed (claim flags take priority over stale pending reservations)",
-            localClaimed ? "(local flag)" : "(server ownership)");
+        if (serverClaimed) {
+          log("route: AlreadyClaimed (all eligible owned on V3, overrides stale pending reservations)");
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.AlreadyClaimed);
         } else {
@@ -323,22 +321,20 @@ class ClaimPixelsDialogStore extends Reactionable(
           this.startPollingForBurnConfirmation();
         }
       } else {
-        // Primary check: localStorage flag written on successful claim
-        const localClaimed = stored?.claimed === true;
         // Fallback A: server-indexed V3 ownership
         const allEligible = [...this.eligibility.mainnet, ...this.eligibility.base];
         const ownedOnV3 = new Set(AppStore.web3.puppersOwned);
         const serverClaimed = allEligible.length > 0 && allEligible.every(id => ownedOnV3.has(id));
-        // Fallback B: direct V3 contract ownerOf check (works even with empty localStorage + unindexed server)
+        // Fallback B: direct V3 contract ownerOf — only fires if indexer hasn't caught up
         let contractClaimed = false;
-        if (!localClaimed && !serverClaimed && allEligible.length > 0 && AppStore.web3.address) {
+        if (!serverClaimed && allEligible.length > 0 && AppStore.web3.address) {
           const owned = await AppStore.web3.getOwnedEligibleV3Tokens(allEligible, AppStore.web3.address);
-          contractClaimed = owned.length > 0;
+          contractClaimed = owned.length === allEligible.length;
         }
 
-        if (localClaimed || serverClaimed || contractClaimed) {
+        if (serverClaimed || contractClaimed) {
           log("route: AlreadyClaimed",
-            localClaimed ? "(local flag)" : serverClaimed ? "(server ownership)" : "(contract ownerOf)");
+            serverClaimed ? "(server ownership)" : "(contract ownerOf)");
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.AlreadyClaimed);
         } else {
