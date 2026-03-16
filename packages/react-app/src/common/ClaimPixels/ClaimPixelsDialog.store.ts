@@ -304,10 +304,24 @@ class ClaimPixelsDialogStore extends Reactionable(
           this.pushNavigation(ClaimPixelsModalView.ReadyToClaim);
         }
       } else if (this.pendingReservations.length > 0 && (this.burnedMainnet.length > 0 || this.burnedBase.length > 0)) {
-        log("route: WaitingForConfirmation (burn pending on server)");
-        this.destroyNavigation();
-        this.pushNavigation(ClaimPixelsModalView.WaitingForConfirmation);
-        this.startPollingForBurnConfirmation();
+        // Guard: contract retains stale reservation records after minting — check claim
+        // flags before trusting pendingReservations as evidence that claim hasn't happened.
+        const localClaimed = stored?.claimed === true;
+        const allEligible = [...this.eligibility.mainnet, ...this.eligibility.base];
+        const ownedOnV3 = new Set(AppStore.web3.puppersOwned);
+        const serverClaimed = allEligible.length > 0 && allEligible.every(id => ownedOnV3.has(id));
+
+        if (localClaimed || serverClaimed) {
+          log("route: AlreadyClaimed (claim flags take priority over stale pending reservations)",
+            localClaimed ? "(local flag)" : "(server ownership)");
+          this.destroyNavigation();
+          this.pushNavigation(ClaimPixelsModalView.AlreadyClaimed);
+        } else {
+          log("route: WaitingForConfirmation (burn pending on server)");
+          this.destroyNavigation();
+          this.pushNavigation(ClaimPixelsModalView.WaitingForConfirmation);
+          this.startPollingForBurnConfirmation();
+        }
       } else {
         // Primary check: localStorage flag written on successful claim
         const localClaimed = stored?.claimed === true;
