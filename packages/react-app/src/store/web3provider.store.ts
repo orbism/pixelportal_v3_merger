@@ -107,6 +107,13 @@ class Web3providerStore {
         console.log("Skipping network validation — intentional switch in progress");
         return;
       }
+      // Attempt silent auto-switch before giving up
+      console.log("Wrong network — attempting auto-switch to", env.app.targetChainId);
+      const switched = await AppStore.web3.switchNetwork(env.app.targetChainId);
+      if (switched) {
+        // wagmi will re-trigger connect() once the chain changes — nothing else to do
+        return;
+      }
       showErrorToast(`Please connect to ${env.app.targetNetworkName.toLocaleUpperCase()}`);
       await this.disconnect();
     }
