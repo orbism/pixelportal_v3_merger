@@ -1,0 +1,10 @@
+{
+  "imports": {
+    "fast-png": "npm:fast-png@^8.0"
+  },
+  "tasks": {
+    "images": "deno run --allow-read --allow-write generate-images.ts dev-settings.json",
+    "metadata": "deno run --allow-read --allow-write generate-metadata.ts dev-settings.json",
+    "check": "deno run --allow-read check-metadata.ts dev-settings.json"
+  }
+}

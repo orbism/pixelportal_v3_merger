@@ -7,7 +7,7 @@
   "attributes": [
     {
       "trait_type": "Index",
-      "value": "{index}"
+      "value": "{pixel_index}"
     },
     {
       "trait_type": "X Coordinate",

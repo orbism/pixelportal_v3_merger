@@ -1,5 +1,11 @@
 {
     "image": "/Users/user/vcs/int/pixel-portal-v3/THE_ACTUAL_NFT_IMAGE.png",
+    "name": "Doge Pixel",
+    "description": "Pixel from The Doge",
+    "externalUrlPrefix": "https://pixelportal.ownthedoge.com/px",
+    "ipfsDomain": "therealdoge.mypinata.cloud",
+    "ipfsImageDirCid": "QmPA4CeAnbKqLihHbegBcXS94sw6Gke1nd38QPR2nkCbnX",
+    "imageUrlPrefix": "https://app-api.ownthedoge.com/assets",
     "indexOffset": 1000000,
     "output": "/Users/user/vcs/int/pixel-portal-v3/packages/generate-nft-data/output",
     "metadataTemplate": "/Users/user/vcs/int/pixel-portal-v3/packages/generate-nft-data/metadata-template.json",
