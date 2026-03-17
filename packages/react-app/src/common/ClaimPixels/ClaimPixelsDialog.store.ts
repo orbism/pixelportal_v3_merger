@@ -331,58 +331,62 @@ class ClaimPixelsDialogStore extends Reactionable(
       }
 
       // Smart routing decision
+      // Key insight: pendingReservations contains ALL pre-reserved tokens with burnConfirmed=false,
+      // including tokens the user NEVER burned. Only tokens that also appear in burnedMainnet/burnedBase
+      // are genuinely pending burn verification.
+      const genuinelyPendingBurn = this.pendingReservations.filter(p =>
+        this.burnedMainnet.includes(p.tokenId) || this.burnedBase.includes(p.tokenId)
+      );
       log("Routing decision claimable:", this.claimablePixels.length,
-        "| pending:", this.pendingReservations.length,
+        "| genuinelyPendingBurn:", genuinelyPendingBurn.map(p => p.tokenId),
+        "| pre-reserved (not burned):", this.pendingReservations.filter(p =>
+          !this.burnedMainnet.includes(p.tokenId) && !this.burnedBase.includes(p.tokenId)
+        ).map(p => p.tokenId),
+        "| mainnetPixelsToBurn:", this.mainnetPixelsToBurn.length,
         "| basePixelsToBurn:", this.basePixelsToBurn.length);
 
       if (this.claimablePixels.length > 0) {
         if (this.mainnetPixelsToBurn.length > 0 || this.basePixelsToBurn.length > 0) {
-          log("route: Overview (V1 or V2 burn still needed)");
+          log("route: Overview (claimable exists + tokens still to burn)");
         } else {
-          log("route: ReadyToClaim");
+          log("route: ReadyToClaim (all burned, claimable ready)");
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.ReadyToClaim);
         }
-      } else if (this.pendingReservations.length > 0 && (this.burnedMainnet.length > 0 || this.burnedBase.length > 0)) {
-        // Guard: contract retains stale reservation records after minting — check claim
-        // flags before trusting pendingReservations as evidence that claim hasn't happened.
-        // (ownedOnV3 already computed above with contract fallback)
+      } else if (genuinelyPendingBurn.length > 0) {
+        // User burned tokens that haven't been swept yet — OR stale post-mint records
         const allEligible = [...this.eligibility.mainnet, ...this.eligibility.base];
         const serverClaimed = allEligible.length > 0 && allEligible.every(id => ownedOnV3.has(id));
 
         if (serverClaimed) {
-          log("route: AlreadyClaimed (all eligible owned on V3, overrides stale pending reservations)");
+          log("route: AlreadyClaimed (all eligible owned on V3)");
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.AlreadyClaimed);
         } else {
-          // Check if ALL pending reservation tokens are already owned on V3.
-          // If so, they are stale post-mint records (contract resets burnConfirmed=false after
-          // minting) — not evidence of a pending sweep. Use ground-truth V3 ownership.
-          const pendingTokenIds = this.pendingReservations.map(p => p.tokenId);
-          const allPendingAreStale = pendingTokenIds.length > 0 &&
-            pendingTokenIds.every(id => ownedOnV3.has(id));
+          const genuinelyPendingIds = genuinelyPendingBurn.map(p => p.tokenId);
+          const allGenuinePendingAreStale = genuinelyPendingIds.every(id => ownedOnV3.has(id));
 
-          if (allPendingAreStale && (this.mainnetPixelsToBurn.length > 0 || this.basePixelsToBurn.length > 0)) {
-            log("route: Overview (all pending records are stale, tokens remain to burn on other network)");
+          if (allGenuinePendingAreStale && (this.mainnetPixelsToBurn.length > 0 || this.basePixelsToBurn.length > 0)) {
+            log("route: Overview (genuine pending all stale, tokens remain to burn)");
             this.destroyNavigation();
             this.pushNavigation(ClaimPixelsModalView.Overview);
-          } else if (allPendingAreStale) {
-            log("route: AlreadyClaimed (all pending records stale, all eligible burned)");
+          } else if (allGenuinePendingAreStale) {
+            log("route: AlreadyClaimed (genuine pending all stale, all burned)");
             this.destroyNavigation();
             this.pushNavigation(ClaimPixelsModalView.AlreadyClaimed);
           } else {
-            log("route: WaitingForConfirmation (burn genuinely pending on server)");
+            log("route: WaitingForConfirmation (genuinely burned tokens pending verification)");
             this.destroyNavigation();
             this.pushNavigation(ClaimPixelsModalView.WaitingForConfirmation);
             this.startPollingForBurnConfirmation();
           }
         }
       } else {
-        // Fallback A: server-indexed V3 ownership
+        // No claimable, no genuinely pending burns
         const allEligible = [...this.eligibility.mainnet, ...this.eligibility.base];
-        const ownedOnV3 = new Set(AppStore.web3.puppersOwned);
-        const serverClaimed = allEligible.length > 0 && allEligible.every(id => ownedOnV3.has(id));
-        // Fallback B: direct V3 contract ownerOf — only fires if indexer hasn't caught up
+        const ownedOnV3Check = new Set(AppStore.web3.puppersOwned);
+        const serverClaimed = allEligible.length > 0 && allEligible.every(id => ownedOnV3Check.has(id));
+
         let contractClaimed = false;
         if (!serverClaimed && allEligible.length > 0 && AppStore.web3.address) {
           const owned = await AppStore.web3.getOwnedEligibleV3Tokens(allEligible, AppStore.web3.address);
@@ -390,12 +394,11 @@ class ClaimPixelsDialogStore extends Reactionable(
         }
 
         if (serverClaimed || contractClaimed) {
-          log("route: AlreadyClaimed",
-            serverClaimed ? "(server ownership)" : "(contract ownerOf)");
+          log("route: AlreadyClaimed", serverClaimed ? "(server)" : "(contract)");
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.AlreadyClaimed);
         } else {
-          log("route: Overview (no actionable state)");
+          log("route: Overview (default — show burn/claim sections)");
         }
       }
 
@@ -650,20 +653,28 @@ class ClaimPixelsDialogStore extends Reactionable(
           this.pushNavigation(ClaimPixelsModalView.ReadyToClaim);
         }
       } else {
-        // Guard: pending reservations may be stale post-mint records (burnConfirmed reset to false
-        // by contract after minting). Check V3 ownership as ground truth.
-        const pendingTokenIds = this.pendingReservations.map(p => p.tokenId);
+        // Filter to genuinely burned tokens (appear in localStorage burn records)
+        const genuinelyPending = this.pendingReservations.filter(p =>
+          this.burnedMainnet.includes(p.tokenId) || this.burnedBase.includes(p.tokenId)
+        );
+        const genuinelyPendingIds = genuinelyPending.map(p => p.tokenId);
         const ownedOnV3 = new Set(AppStore.web3.puppersOwned);
-        const allPendingAreStale = pendingTokenIds.length > 0 &&
-          pendingTokenIds.every(id => ownedOnV3.has(id));
+        const allGenuinePendingAreStale = genuinelyPendingIds.length > 0 &&
+          genuinelyPendingIds.every(id => ownedOnV3.has(id));
 
-        if (allPendingAreStale && (this.mainnetPixelsToBurn.length > 0 || this.basePixelsToBurn.length > 0)) {
+        if (allGenuinePendingAreStale && (this.mainnetPixelsToBurn.length > 0 || this.basePixelsToBurn.length > 0)) {
           this.stopPolling();
-          log("poll: all pending records stale, tokens remain to burn — routing to Overview");
+          log("poll: genuinely pending all stale, tokens remain — Overview");
+          this.destroyNavigation();
+          this.pushNavigation(ClaimPixelsModalView.Overview);
+        } else if (genuinelyPendingIds.length === 0) {
+          // All pending are pre-reserved (not burned) — shouldn't be polling, escape
+          this.stopPolling();
+          log("poll: no genuinely pending burns, escaping to Overview");
           this.destroyNavigation();
           this.pushNavigation(ClaimPixelsModalView.Overview);
         } else {
-          log(`poll #${this.pollCount}: not confirmed yet, still waiting`);
+          log(`poll: genuinely pending burns not confirmed yet, still waiting`);
         }
       }
     } catch (error) {
