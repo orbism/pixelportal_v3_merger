@@ -153,6 +153,7 @@ const Overview = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
           pixelsToBurn={store.mainnetPixelsToBurn}
           allPixels={store.eligibility.mainnet}
           burnedPixels={store.burnedMainnet}
+          claimedOnV3={store.mainnetPixelsClaimedOnV3}
         />
       )}
 
@@ -165,7 +166,46 @@ const Overview = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
           pixelsToBurn={store.basePixelsToBurn}
           allPixels={store.eligibility.base}
           burnedPixels={store.burnedBase}
+          claimedOnV3={store.basePixelsClaimedOnV3}
         />
+      )}
+
+      {/* Claim Button — shown when all pixels are burned */}
+      {store.allPixelsBurned && (
+        <Box
+          textAlign="center"
+          py={4}
+          bg={lightOrDarkMode(colorMode, "green.50", "green.900")}
+          borderRadius="md"
+          border="2px solid"
+          borderColor={lightOrDarkMode(colorMode, "green.400", "green.500")}
+        >
+          {store.claimablePixels.length > 0 ? (
+            <>
+              <Typography variant={TVariant.ComicSans14} block mb={3}>
+                {store.claimablePixels.length} pixel(s) ready to claim on V3!
+              </Typography>
+              <Button
+                size="lg"
+                onClick={() => {
+                  store.destroyNavigation();
+                  store.pushNavigation(ClaimPixelsModalView.ReadyToClaim);
+                }}
+              >
+                Claim Your Pixels!
+              </Button>
+            </>
+          ) : (
+            <>
+              <Typography variant={TVariant.ComicSans14} block mb={3}>
+                All pixels burned! Checking claim eligibility...
+              </Typography>
+              <Button onClick={() => store.loadClaimablePixels()}>
+                Refresh Status
+              </Button>
+            </>
+          )}
+        </Box>
       )}
 
       {/* Superbridge Link */}
@@ -195,21 +235,24 @@ interface NetworkSectionProps {
   pixelsToBurn: number[];
   allPixels: number[];
   burnedPixels: number[];
+  claimedOnV3: number[];
 }
 
-const NetworkSection = observer(({ store, network, title, pixelsToBurn, allPixels, burnedPixels }: NetworkSectionProps) => {
+const NetworkSection = observer(({ store, network, title, pixelsToBurn, allPixels, burnedPixels, claimedOnV3 }: NetworkSectionProps) => {
   const { colorMode } = useColorMode();
   const allBurned = pixelsToBurn.length === 0 && burnedPixels.length > 0;
+  const allClaimedOnV3 = claimedOnV3.length === allPixels.length && allPixels.length > 0;
+  const isDone = allBurned || allClaimedOnV3;
 
   return (
     <Box
       p={4}
       borderRadius="md"
       border="1px solid"
-      borderColor={allBurned
+      borderColor={isDone
         ? lightOrDarkMode(colorMode, "green.300", "green.600")
         : lightOrDarkMode(colorMode, "gray.300", "purple.500")}
-      bg={allBurned
+      bg={isDone
         ? lightOrDarkMode(colorMode, "green.50", "green.900")
         : lightOrDarkMode(colorMode, "white", "purple.700")}
     >
@@ -219,14 +262,20 @@ const NetworkSection = observer(({ store, network, title, pixelsToBurn, allPixel
             {title}
           </Typography>
           <Typography variant={TVariant.ComicSans12} block mt={1}>
-            {allBurned ? (
-              <span style={{ color: lightOrDarkMode(colorMode, "green", "#68D391") }}>All {burnedPixels.length} pixels burned</span>
+            {allClaimedOnV3 ? (
+              <span style={{ color: lightOrDarkMode(colorMode, "green", "#68D391") }}>
+                All {claimedOnV3.length} pixel(s) already claimed on V3
+              </span>
+            ) : allBurned ? (
+              <span style={{ color: lightOrDarkMode(colorMode, "green", "#68D391") }}>
+                All {burnedPixels.length} pixel(s) burned — ready to claim
+              </span>
             ) : (
               `${pixelsToBurn.length} pixel(s) to burn`
             )}
           </Typography>
         </Box>
-        {!allBurned && pixelsToBurn.length > 0 && (
+        {!isDone && pixelsToBurn.length > 0 && (
           <Button onClick={() => store.initiateBurn(network)} colorScheme="orange">
             Burn All
           </Button>

@@ -191,6 +191,30 @@ class ClaimPixelsDialogStore extends Reactionable(
     return this.totalPixelsEligible > 0;
   }
 
+  @computed
+  get mainnetPixelsClaimedOnV3(): number[] {
+    const owned = new Set(AppStore.web3.puppersOwned);
+    return this.eligibility.mainnet.filter(id => owned.has(id));
+  }
+
+  @computed
+  get basePixelsClaimedOnV3(): number[] {
+    const owned = new Set(AppStore.web3.puppersOwned);
+    return this.eligibility.base.filter(id => owned.has(id));
+  }
+
+  @computed
+  get allMainnetClaimedOnV3(): boolean {
+    return this.eligibility.mainnet.length > 0 &&
+      this.mainnetPixelsClaimedOnV3.length === this.eligibility.mainnet.length;
+  }
+
+  @computed
+  get allBaseClaimedOnV3(): boolean {
+    return this.eligibility.base.length > 0 &&
+      this.basePixelsClaimedOnV3.length === this.eligibility.base.length;
+  }
+
   // ============================================
   // localStorage Persistence
   // ============================================
