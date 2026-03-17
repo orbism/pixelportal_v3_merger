@@ -708,13 +708,18 @@ class Web3Store extends Reactionable(Web3providerStore) {
    * @param tokenIds Array of pixel token IDs to burn
    */
   async burnV1Pixels(tokenIds: number[]): Promise<ethers.ContractTransaction> {
-    const currentChainId = await this.getCurrentChainId();
-    if (currentChainId !== this.v1ChainId) {
+    // Create a fresh provider/signer directly from window.ethereum.
+    // After switchNetwork(), window.ethereum is immediately on the new chain,
+    // but this.signer (from wagmi) may lag behind due to async React lifecycle.
+    // @ts-ignore
+    const freshProvider = new ethers.providers.Web3Provider(window.ethereum, 'any');
+    const network = await freshProvider.getNetwork();
+    if (network.chainId !== this.v1ChainId) {
       throw new Error(`Please switch to ${this.getNetworkDisplayName(this.v1ChainId)} to burn V1 pixels`);
     }
-
-    const contract = this.getV1Contract();
-    console.log(`Burning ${tokenIds.length} pixels on V1:`, tokenIds);
+    const freshSigner = freshProvider.getSigner();
+    const contract = new Contract(this.v1ContractAddress, LEGACY_PX_ABI, freshSigner);
+    console.log(`Burning ${tokenIds.length} pixels on V1 (chainId: ${network.chainId}):`, tokenIds);
     return contract.burnPuppers(tokenIds);
   }
 
@@ -724,13 +729,15 @@ class Web3Store extends Reactionable(Web3providerStore) {
    * @param tokenIds Array of pixel token IDs to burn
    */
   async burnV2Pixels(tokenIds: number[]): Promise<ethers.ContractTransaction> {
-    const currentChainId = await this.getCurrentChainId();
-    if (currentChainId !== this.v2ChainId) {
+    // @ts-ignore
+    const freshProvider = new ethers.providers.Web3Provider(window.ethereum, 'any');
+    const network = await freshProvider.getNetwork();
+    if (network.chainId !== this.v2ChainId) {
       throw new Error(`Please switch to ${this.getNetworkDisplayName(this.v2ChainId)} to burn V2 pixels`);
     }
-
-    const contract = this.getV2Contract();
-    console.log(`Burning ${tokenIds.length} pixels on V2:`, tokenIds);
+    const freshSigner = freshProvider.getSigner();
+    const contract = new Contract(this.v2ContractAddress, LEGACY_PX_ABI, freshSigner);
+    console.log(`Burning ${tokenIds.length} pixels on V2 (chainId: ${network.chainId}):`, tokenIds);
     return contract.burnPuppers(tokenIds);
   }
 
