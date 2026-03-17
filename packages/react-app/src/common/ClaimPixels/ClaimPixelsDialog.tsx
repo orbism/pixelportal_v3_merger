@@ -279,7 +279,7 @@ const ConfirmBurn = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
       <Alert status="warning" borderRadius="md">
         <AlertIcon />
         <Typography variant={TVariant.ComicSans14}>
-          This action is irreversible. Your v{network === "mainnet" ? "1" : "2"} pixels will be permanently burned.
+          This action is irreversible. Your v{network === "mainnet" ? "1" : "2"} pixels will be permanently burned, so that you may claim them on the newer, better v3 contract!
         </Typography>
       </Alert>
 
