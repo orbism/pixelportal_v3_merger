@@ -195,9 +195,9 @@ class Web3Store extends Reactionable(Web3providerStore) {
     // this.getUSDPerPixel();
   }
 
-  async connect(signer: ethers.Signer, network: Chain, provider: ethers.providers.BaseProvider) {
+  async connect(signer: ethers.Signer, network: Chain, provider: ethers.providers.BaseProvider, transport?: any) {
     try {
-      await super.connect(signer, network, provider);
+      await super.connect(signer, network, provider, transport);
 
       // Only rebind contracts when on the target chain.
       // When temporarily on L1 (e.g. Sepolia for V1 burn), keep existing
@@ -598,6 +598,17 @@ class Web3Store extends Reactionable(Web3providerStore) {
     });
   }
 
+  /**
+   * Get a fresh Web3Provider from the best available source.
+   * Prefers window.ethereum (injected wallets like Rabby, MetaMask, Coinbase)
+   * but falls back to the connector transport (WalletConnect, Ledger).
+   */
+  private getFreshProvider(): ethers.providers.Web3Provider {
+    const source = (window as any).ethereum || this._connectorTransport;
+    if (!source) throw new Error("No wallet provider available");
+    return new ethers.providers.Web3Provider(source, 'any');
+  }
+
   // ============================================
   // V1/V2 Legacy Contract Methods for Migration
   // ============================================
@@ -649,8 +660,12 @@ class Web3Store extends Reactionable(Web3providerStore) {
    */
   async switchNetwork(chainId: number): Promise<boolean> {
     try {
-      // @ts-ignore - ethereum is injected by wallet
-      await window.ethereum?.request({
+      const source = (window as any).ethereum || this._connectorTransport;
+      if (!source?.request) {
+        console.error("No wallet provider available for network switch");
+        return false;
+      }
+      await source.request({
         method: "wallet_switchEthereumChain",
         params: [{ chainId: `0x${chainId.toString(16)}` }],
       });
@@ -659,7 +674,6 @@ class Web3Store extends Reactionable(Web3providerStore) {
       // 4902 = chain not added to wallet
       if (error.code === 4902) {
         console.log("Chain not added to wallet, need to add it first");
-        // Could add chain here if needed
       }
       console.error("Failed to switch network:", error);
       return false;
@@ -671,8 +685,9 @@ class Web3Store extends Reactionable(Web3providerStore) {
    */
   async getCurrentChainId(): Promise<number | null> {
     try {
-      // @ts-ignore - ethereum is injected by wallet
-      const chainIdHex = await window.ethereum?.request({ method: "eth_chainId" });
+      const source = (window as any).ethereum || this._connectorTransport;
+      if (!source?.request) return null;
+      const chainIdHex = await source.request({ method: "eth_chainId" });
       return chainIdHex ? parseInt(chainIdHex, 16) : null;
     } catch (error) {
       console.error("Failed to get current chain ID:", error);
@@ -708,11 +723,10 @@ class Web3Store extends Reactionable(Web3providerStore) {
    * @param tokenIds Array of pixel token IDs to burn
    */
   async burnV1Pixels(tokenIds: number[]): Promise<ethers.ContractTransaction> {
-    // Create a fresh provider/signer directly from window.ethereum.
-    // After switchNetwork(), window.ethereum is immediately on the new chain,
-    // but this.signer (from wagmi) may lag behind due to async React lifecycle.
-    // @ts-ignore
-    const freshProvider = new ethers.providers.Web3Provider(window.ethereum, 'any');
+    // Create a fresh provider/signer from the best available source.
+    // For injected wallets, window.ethereum is preferred (fresh signer fix).
+    // For WalletConnect/Ledger, the connector transport is used.
+    const freshProvider = this.getFreshProvider();
     const network = await freshProvider.getNetwork();
     if (network.chainId !== this.v1ChainId) {
       throw new Error(`Please switch to ${this.getNetworkDisplayName(this.v1ChainId)} to burn V1 pixels`);
@@ -729,8 +743,7 @@ class Web3Store extends Reactionable(Web3providerStore) {
    * @param tokenIds Array of pixel token IDs to burn
    */
   async burnV2Pixels(tokenIds: number[]): Promise<ethers.ContractTransaction> {
-    // @ts-ignore
-    const freshProvider = new ethers.providers.Web3Provider(window.ethereum, 'any');
+    const freshProvider = this.getFreshProvider();
     const network = await freshProvider.getNetwork();
     if (network.chainId !== this.v2ChainId) {
       throw new Error(`Please switch to ${this.getNetworkDisplayName(this.v2ChainId)} to burn V2 pixels`);

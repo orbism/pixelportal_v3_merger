@@ -48,7 +48,7 @@ const useWeb3WagmiSync = () => {
       const provider = new ethers.providers.Web3Provider(transport as any, 'any');
       const signer = provider.getSigner(account.address);
       console.log("Connecting...");
-      AppStore.web3.connect(signer, chain, provider);
+      AppStore.web3.connect(signer, chain, provider, transport);
     }
 
     if (AppStore.web3.signer && !chain) {

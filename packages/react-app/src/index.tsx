@@ -14,7 +14,7 @@ import { ToastContainer } from "./DSL/Toast/Toast";
 import { CreateConfigParameters, WagmiProvider, createConfig, http } from "wagmi";
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { base, baseSepolia, foundry, mainnet, sepolia, type Chain } from "wagmi/chains";
-import { coinbaseWallet, magicEdenWallet } from "@rainbow-me/rainbowkit/wallets";
+import { coinbaseWallet, magicEdenWallet, ledgerWallet, rabbyWallet, walletConnectWallet } from "@rainbow-me/rainbowkit/wallets";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -76,7 +76,11 @@ const connectors = connectorsForWallets(
   [
     {
       groupName: "Recommended",
-      wallets: [coinbaseWallet, magicEdenWallet],
+      wallets: [coinbaseWallet, rabbyWallet, walletConnectWallet],
+    },
+    {
+      groupName: "More",
+      wallets: [ledgerWallet, magicEdenWallet],
     },
   ],
   {

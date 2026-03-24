@@ -347,6 +347,16 @@ const ConfirmBurn = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
         </Typography>
       </Box>
 
+      {pixelCount > 20 && (
+        <Alert status="info" borderRadius="md">
+          <AlertIcon />
+          <Typography variant={TVariant.ComicSans14}>
+            You have {pixelCount} pixels on {networkName}. Burns will be batched at 20 per transaction.
+            Stay on this page and sign each TX as it appears.
+          </Typography>
+        </Alert>
+      )}
+
       <Typography variant={TVariant.ComicSans14} block textAlign="center">
         Your wallet will prompt you to switch networks and confirm the transaction.
       </Typography>
@@ -378,16 +388,21 @@ const ConfirmBurn = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
 // ============================================
 const BurningPixels = observer(({ store, network }: { store: ClaimPixelsDialogStore; network: BurnNetwork }) => {
   const networkName = network === "mainnet" ? "Ethereum Mainnet" : "Base";
-  const pixelCount = network === "mainnet" ? store.mainnetPixelsToBurn.length : store.basePixelsToBurn.length;
+  const { burned, total, batch, totalBatches } = store.burnProgress;
+  const hasBatches = totalBatches > 1;
 
   return (
     <VStack spacing={6} align="stretch">
       <Loading
-        title={`Burning pixels on ${networkName}...`}
+        title={hasBatches
+          ? `Batch ${batch} of ${totalBatches} — ${burned} of ${total} pixels burned`
+          : `Burning pixels on ${networkName}...`}
         showSigningHint={!store.hasUserSignedTx}
       />
       <Typography variant={TVariant.ComicSans14} textAlign="center">
-        Burning {pixelCount} pixel(s) on {networkName}
+        {hasBatches
+          ? `Burning ${total} pixel(s) on ${networkName} in ${totalBatches} batches`
+          : `Burning ${total} pixel(s) on ${networkName}`}
       </Typography>
       {store.txHash && (
         <Box textAlign="center">
@@ -493,16 +508,36 @@ const ReadyToClaim = observer(({ store }: { store: ClaimPixelsDialogStore }) => 
     : "Loading...";
   const dogNeededFormatted = store.formatDogAmount(store.totalDogToLockForClaim);
 
+  const isRetry = store.isRetryMode;
+  const failedCount = store.claimBatchErrors.length;
+  const succeededCount = store.claimedPixels.length;
+  const pixelsToShow = isRetry
+    ? store.claimablePixels.filter(p => store.claimBatchErrors.includes(p.tokenId))
+    : store.claimablePixels;
+
   return (
     <VStack spacing={4} align="stretch">
       <Box textAlign="center">
         <Typography variant={TVariant.PresStart20} block>
-          Claim Your Pixels
+          {isRetry ? "Retry Failed Claims" : "Claim Your Pixels"}
         </Typography>
         <Typography variant={TVariant.ComicSans14} block mt={2}>
-          Your burns have been verified. Claim all {store.claimablePixels.length} pixel(s) in v3.
+          {isRetry
+            ? `${succeededCount} pixel(s) claimed successfully, ${failedCount} failed. Retry the failed claims below.`
+            : `Your burns have been verified. Claim all ${store.claimablePixels.length} pixel(s) in v3.`}
         </Typography>
       </Box>
+
+      {/* Batch warning for large claims */}
+      {!isRetry && store.claimablePixels.length > 20 && (
+        <Alert status="info" borderRadius="md">
+          <AlertIcon />
+          <Typography variant={TVariant.ComicSans14}>
+            You have {store.claimablePixels.length} pixels to claim. Claims will be batched at 20 per
+            transaction. Stay on this page and sign each TX as it appears.
+          </Typography>
+        </Alert>
+      )}
 
       {/* DOG balance status */}
       <Box bg={lightOrDarkMode(colorMode, "blue.50", "purple.800")} p={3} borderRadius="md">
@@ -549,15 +584,19 @@ const ReadyToClaim = observer(({ store }: { store: ClaimPixelsDialogStore }) => 
       {/* Read-only pixel grid */}
       <Box maxH="300px" overflowY="auto">
         <SimpleGrid columns={{ base: 3, md: 4 }} spacing={3}>
-          {store.claimablePixels.map(pixel => (
+          {pixelsToShow.map(pixel => (
             <Box
               key={pixel.tokenId}
               position="relative"
               border="1px solid"
-              borderColor={lightOrDarkMode(colorMode, "green.400", "green.600")}
+              borderColor={isRetry
+                ? lightOrDarkMode(colorMode, "red.400", "red.600")
+                : lightOrDarkMode(colorMode, "green.400", "green.600")}
               p={2}
               borderRadius="md"
-              bg={lightOrDarkMode(colorMode, "green.50", "green.900")}
+              bg={isRetry
+                ? lightOrDarkMode(colorMode, "red.50", "red.900")
+                : lightOrDarkMode(colorMode, "green.50", "green.900")}
             >
               <PixelPane size="xs" pupper={pixel.tokenId} />
               <Typography variant={TVariant.PresStart10} textAlign="center" mt={1}>
@@ -569,8 +608,16 @@ const ReadyToClaim = observer(({ store }: { store: ClaimPixelsDialogStore }) => 
       </Box>
 
       <Form onSubmit={() => store.handleClaimSubmit()}>
-        <Flex justifyContent="center">
-          <Submit label="Claim Your Pixels!" isDisabled={!store.canClaim} />
+        <Flex justifyContent="center" gap={3}>
+          {isRetry && (
+            <Button variant="outline" onClick={() => store.clearRetryMode()}>
+              Start Over
+            </Button>
+          )}
+          <Submit
+            label={isRetry ? `Retry ${failedCount} Failed Pixel(s)` : "Claim Your Pixels!"}
+            isDisabled={!store.canClaim}
+          />
         </Flex>
       </Form>
     </VStack>
@@ -582,11 +629,19 @@ const ReadyToClaim = observer(({ store }: { store: ClaimPixelsDialogStore }) => 
 // ============================================
 const ClaimingPixels = observer(({ store }: { store: ClaimPixelsDialogStore }) => {
   const { claimed, total } = store.claimProgress;
-  const progressLabel = total > 0 && claimed < total
-    ? `Claiming ${claimed} of ${total} pixels...`
-    : total > 0
-      ? `Claimed ${claimed} of ${total} pixels!`
-      : `Claiming ${store.selectedPixels.length} pixel(s) in v3...`;
+  const { batch, totalBatches } = store.claimBatchInfo;
+  const hasBatches = totalBatches > 1;
+
+  let progressLabel: string;
+  if (hasBatches && total > 0 && claimed < total) {
+    progressLabel = `Batch ${batch} of ${totalBatches} — Claimed ${claimed} of ${total} pixels`;
+  } else if (total > 0 && claimed < total) {
+    progressLabel = `Claiming ${claimed} of ${total} pixels...`;
+  } else if (total > 0) {
+    progressLabel = `Claimed ${claimed} of ${total} pixels!`;
+  } else {
+    progressLabel = `Claiming ${store.selectedPixels.length} pixel(s) in v3...`;
+  }
 
   return (
     <VStack spacing={6}>

@@ -28,6 +28,9 @@ class Web3providerStore {
   @observable
   address: string | null = null;
 
+  @observable
+  _connectorTransport: any = null;
+
   constructor() {
     makeObservable(this);
     this.initializeProvider();
@@ -65,7 +68,8 @@ class Web3providerStore {
     }
   }
 
-  async connect(signer: ethers.Signer, network: any, provider: ethers.providers.BaseProvider) {
+  async connect(signer: ethers.Signer, network: any, provider: ethers.providers.BaseProvider, transport?: any) {
+    this._connectorTransport = transport || null;
     console.log("Received signer:", signer);
     console.log("Signer methods:", Object.keys(signer).join(", "));
 

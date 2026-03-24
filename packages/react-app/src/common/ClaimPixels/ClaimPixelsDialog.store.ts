@@ -35,6 +35,7 @@ interface MigrationEligibility {
 }
 
 const STORAGE_KEY_PREFIX = "px_claim_state_";
+const BURN_BATCH_SIZE = 20;
 const TAG = "[ClaimPixels]";
 const log  = (...args: any[]) => console.log(TAG, ...args);
 const warn = (...args: any[]) => console.warn(TAG, ...args);
@@ -96,6 +97,18 @@ class ClaimPixelsDialogStore extends Reactionable(
   @observable
   burnError: string | null = null;
 
+  // Burn batch progress tracking
+  @observable
+  burnProgress = { burned: 0, total: 0, batch: 0, totalBatches: 0 };
+
+  // Claim batch info for UI
+  @observable
+  claimBatchInfo = { batch: 0, totalBatches: 0 };
+
+  // Claim retry mode — only retry failed pixels
+  @observable
+  isRetryMode = false;
+
   // Polling interval for checking burn confirmation
   private pollIntervalId: NodeJS.Timeout | null = null;
 
@@ -144,13 +157,15 @@ class ClaimPixelsDialogStore extends Reactionable(
 
   @computed
   get totalDogNeeded(): BigNumber {
-    return BigNumber.from(DOG_PER_PIXEL).mul(this.claimablePixels.length);
+    const count = this.isRetryMode ? this.claimBatchErrors.length : this.claimablePixels.length;
+    return BigNumber.from(DOG_PER_PIXEL).mul(count);
   }
 
   @computed
   get hasSufficientDog(): boolean {
     if (this.dogBalanceOnBase === null) return false;
-    if (this.claimablePixels.length === 0) return true;
+    const count = this.isRetryMode ? this.claimBatchErrors.length : this.claimablePixels.length;
+    if (count === 0) return true;
     return this.dogBalanceOnBase.gte(this.totalDogNeeded);
   }
 
@@ -527,17 +542,25 @@ class ClaimPixelsDialogStore extends Reactionable(
   async confirmBurn() {
     if (!this.pendingBurnNetwork) return;
 
+    const BATCH_SIZE = 20;
     const network = this.pendingBurnNetwork;
-    const tokenIds = network === "mainnet" ? this.mainnetPixelsToBurn : this.basePixelsToBurn;
+    const tokenIds = network === "mainnet" ? [...this.mainnetPixelsToBurn] : [...this.basePixelsToBurn];
 
     if (tokenIds.length === 0) {
       showErrorToast("No pixels to burn on this network");
       return;
     }
 
+    // Chunk into batches
+    const chunks: number[][] = [];
+    for (let i = 0; i < tokenIds.length; i += BATCH_SIZE) {
+      chunks.push(tokenIds.slice(i, i + BATCH_SIZE));
+    }
+
     runInAction(() => {
       this.hasUserSignedTx = false;
       this.burnError = null;
+      this.burnProgress = { burned: 0, total: tokenIds.length, batch: 0, totalBatches: chunks.length };
     });
 
     this.pushNavigation(
@@ -547,12 +570,13 @@ class ClaimPixelsDialogStore extends Reactionable(
     );
 
     try {
+      // Network switch happens ONCE before the batch loop
       const currentChainId = await AppStore.web3.getCurrentChainId();
       const requiredChainId = network === "mainnet"
         ? AppStore.web3.v1ChainId
         : AppStore.web3.v2ChainId;
 
-      log(`confirmBurn() network: ${network}, tokenIds: [${tokenIds}], currentChain: ${currentChainId}, requiredChain: ${requiredChainId}`);
+      log(`confirmBurn() network: ${network}, tokenIds: [${tokenIds}] (${chunks.length} batches), currentChain: ${currentChainId}, requiredChain: ${requiredChainId}`);
 
       if (currentChainId !== requiredChainId) {
         log(`Switching to chain ${requiredChainId}...`);
@@ -565,42 +589,60 @@ class ClaimPixelsDialogStore extends Reactionable(
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
-      let tx: ethers.ContractTransaction;
+      // Set intentional switch flag for the entire batch loop
+      AppStore.web3.isIntentionalNetworkSwitch = true;
+
       try {
-        if (network === "mainnet") {
-          tx = await AppStore.web3.burnV1Pixels(tokenIds);
-        } else {
-          tx = await AppStore.web3.burnV2Pixels(tokenIds);
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i];
+          log(`burn batch ${i + 1}/${chunks.length} tokens: [${chunk}]`);
+
+          runInAction(() => {
+            this.hasUserSignedTx = false;
+            this.burnProgress.batch = i + 1;
+          });
+
+          let tx: ethers.ContractTransaction;
+          if (network === "mainnet") {
+            tx = await AppStore.web3.burnV1Pixels(chunk);
+          } else {
+            tx = await AppStore.web3.burnV2Pixels(chunk);
+          }
+
+          log(`burn batch ${i + 1} tx submitted:`, tx.hash);
+          runInAction(() => {
+            this.hasUserSignedTx = true;
+            this.txHash = tx.hash;
+          });
+
+          showDebugToast(`Burning batch ${i + 1}/${chunks.length}...`);
+
+          const receipt = await tx.wait();
+          log(`burn batch ${i + 1} confirmed in block:`, receipt.blockNumber);
+
+          runInAction(() => {
+            this.burnProgress.burned += chunk.length;
+            if (network === "mainnet") {
+              this.burnedMainnet = [...this.burnedMainnet, ...chunk];
+            } else {
+              this.burnedBase = [...this.burnedBase, ...chunk];
+            }
+          });
+
+          // Save after each batch for crash resilience
+          this.saveToStorage();
         }
       } finally {
         AppStore.web3.isIntentionalNetworkSwitch = false;
       }
 
-      log("Burn tx submitted:", tx.hash);
       runInAction(() => {
-        this.hasUserSignedTx = true;
-        this.txHash = tx.hash;
-      });
-
-      showDebugToast(`Burning ${tokenIds.length} pixels...`);
-
-      const receipt = await tx.wait();
-      log("Burn confirmed in block:", receipt.blockNumber, "tx:", receipt.transactionHash);
-
-      runInAction(() => {
-        if (network === "mainnet") {
-          this.burnedMainnet = [...this.burnedMainnet, ...tokenIds];
-        } else {
-          this.burnedBase = [...this.burnedBase, ...tokenIds];
-        }
         this.pendingBurnNetwork = null;
       });
 
-      this.saveToStorage();
-
       showSuccessToast(`Successfully burned ${tokenIds.length} pixels on ${network === "mainnet" ? "Ethereum" : "Base"}`);
 
-      // Fire-and-forget fast-path verification so polling finds it sooner
+      // Fire-and-forget fast-path verification with ALL tokenIds
       const serverNetwork = AppStore.web3.isTestnet
         ? (network === "mainnet" ? "sepolia" : "base-sepolia")
         : network;
@@ -627,6 +669,7 @@ class ClaimPixelsDialogStore extends Reactionable(
 
       showErrorToast(error.message || "Burn failed");
 
+      // Partial progress already saved — remaining pixels still in pixelsToBurn computed
       this.destroyNavigation();
       this.pushNavigation(ClaimPixelsModalView.Overview);
     }
@@ -710,13 +753,31 @@ class ClaimPixelsDialogStore extends Reactionable(
   // Claim Flow
   // ============================================
 
-  async handleClaimSubmit() {
-    log("claim: handleClaimSubmit() pixels:", this.selectedPixels);
+  @action
+  clearRetryMode() {
+    this.isRetryMode = false;
+    this.claimBatchErrors = [];
+    this.selectedPixels = this.claimablePixels.map(p => p.tokenId);
+  }
 
-    if (this.selectedPixels.length === 0) {
+  async handleClaimSubmit() {
+    // In retry mode, only claim the previously failed pixels
+    const pixelsToProcess = this.isRetryMode ? [...this.claimBatchErrors] : [...this.selectedPixels];
+    log("claim: handleClaimSubmit() pixels:", pixelsToProcess, "retryMode:", this.isRetryMode);
+
+    if (pixelsToProcess.length === 0) {
       showErrorToast("No pixels to claim");
       return;
     }
+
+    // Update selectedPixels to match what we're actually processing
+    runInAction(() => {
+      this.selectedPixels = pixelsToProcess;
+      if (this.isRetryMode) {
+        this.claimBatchErrors = [];
+        this.isRetryMode = false;
+      }
+    });
 
     // Ensure user is on the V3 network (Base)
     const currentChainId = await AppStore.web3.getCurrentChainId();
@@ -736,7 +797,7 @@ class ClaimPixelsDialogStore extends Reactionable(
     try {
       const allowance = await AppStore.web3.getPxDogSpendAllowance();
       const lockAmountPerPixel = await AppStore.web3.getPxLockAmountPerPixel();
-      const totalNeeded = lockAmountPerPixel.mul(this.claimablePixels.length);
+      const totalNeeded = lockAmountPerPixel.mul(this.selectedPixels.length);
       log(`claim: DOG allowance=${ethers.utils.formatEther(allowance)}, needed=${ethers.utils.formatEther(totalNeeded)}, sufficient=${allowance.gte(totalNeeded)}`);
 
       if (allowance.lt(totalNeeded)) {
@@ -782,6 +843,7 @@ class ClaimPixelsDialogStore extends Reactionable(
 
     runInAction(() => {
       this.claimProgress = { claimed: 0, total: this.selectedPixels.length };
+      this.claimBatchInfo = { batch: 0, totalBatches: chunks.length };
       this.claimBatchErrors = [];
       this.hasUserSignedTx = false;
     });
@@ -792,6 +854,12 @@ class ClaimPixelsDialogStore extends Reactionable(
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
       log(`claim: batch ${i + 1}/${chunks.length} tokens: [${chunk}]`);
+
+      runInAction(() => {
+        this.hasUserSignedTx = false;
+        this.claimBatchInfo.batch = i + 1;
+      });
+
       try {
         const tx = await AppStore.web3.claimReservedTokensBatch(chunk);
         log(`claim: batch ${i + 1} tx submitted:`, tx.hash);
@@ -837,11 +905,15 @@ class ClaimPixelsDialogStore extends Reactionable(
     } else if (claimedIds.length > 0) {
       runInAction(() => {
         this.claimedPixels = claimedIds;
+        this.isRetryMode = true;
       });
       showErrorToast(`Failed to claim ${this.claimBatchErrors.length} pixel(s). Please retry.`);
       this.destroyNavigation();
       this.pushNavigation(ClaimPixelsModalView.ReadyToClaim);
     } else {
+      runInAction(() => {
+        this.isRetryMode = true;
+      });
       showErrorToast("Failed to claim any pixels");
       this.destroyNavigation();
       this.pushNavigation(ClaimPixelsModalView.ReadyToClaim);
@@ -877,6 +949,9 @@ class ClaimPixelsDialogStore extends Reactionable(
     this.claimedPixels = [];
     this.pendingBurnNetwork = null;
     this.burnError = null;
+    this.burnProgress = { burned: 0, total: 0, batch: 0, totalBatches: 0 };
+    this.claimBatchInfo = { batch: 0, totalBatches: 0 };
+    this.isRetryMode = false;
     this.stopPolling();
     this.destroyNavigation();
   }
